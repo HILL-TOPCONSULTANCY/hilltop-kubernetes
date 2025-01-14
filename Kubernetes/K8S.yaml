@@ -149,7 +149,9 @@ spec:
     image: jenkins/jenkins
 - 
 
-
+---
+hilltopconsultancy/nodejs-app:v1
+---
 - kubectl apply/create -f <filename> #to create declaratively from a yml file
 - kubectl get/describe pods <podname> #to get the pod spec
 - kubectl create deployment redis-deployment --image=redis123 --dry-run=client -o yaml > deployment.yaml
