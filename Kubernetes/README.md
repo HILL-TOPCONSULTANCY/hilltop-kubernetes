@@ -151,7 +151,7 @@ metadata:
 spec:
   containers:
   - name: my-app-container
-    image: nginx:1.23.1
+    image: hilltopconsultancy/docker:v2
     ports:
     - containerPort: 80
 ```
@@ -275,7 +275,7 @@ note: you can only add names and labels under metadata or specifications from k8
 - spec: # This provides additional information about the object to create. it varies per object
 -  containers:  list/array
       - name: nginx-container  # first item in the list
-        image: nginx
+        image: hilltopconsultancy/docker:v2
       - name:
         image:
 ```
@@ -290,9 +290,9 @@ metadata:
 spec:
   containers:
   - name: nginx
-    image: nginx:latest
+    image: hilltopconsultancy/docker:v2
     ports:
-    - containerPort: 80
+    - containerPort: 8080
 
 ```
 ```yaml
@@ -378,9 +378,9 @@ spec:
     spec:
       containers:
       - name: devops-app-container
-        image: nginx:1.23.1
+        image: hilltopconsultancy/docker:v2
         ports:
-        - containerPort: 80
+        - containerPort: 8080
 ```
 
 #### Explanation:
@@ -473,10 +473,10 @@ spec:
         app: nginx
     spec:
       containers:
-      - name: nginx
-        image: nginx:latest
+      - name: hilltop-container
+        image: hilltopconsultancy/docker:v2
         ports:
-        - containerPort: 80
+        - containerPort: 8080
 EOF
 ```
 ```yaml
