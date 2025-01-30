@@ -284,12 +284,12 @@ note: you can only add names and labels under metadata or specifications from k8
 apiVersion: v1
 kind: Pod
 metadata:
-  name: nginx
+  name: hilltop-app
   labels:
-    app: nginx
+    app: hilltop-app
 spec:
   containers:
-  - name: nginx
+  - name: hilltop
     image: hilltopconsultancy/docker:v2
     ports:
     - containerPort: 8080
@@ -299,7 +299,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: nginx-nodeport
+  name: hilltop-nodeport
 spec:
   selector:
     app: nginx
@@ -461,16 +461,16 @@ cat <<EOF | sudo tee deploy.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nginx-deployment
+  name: hilltop-app-deployment
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: nginx
+      app: hilltop-app
   template:
     metadata:
       labels:
-        app: nginx
+        app: hilltop-app
     spec:
       containers:
       - name: hilltop-container
@@ -484,10 +484,10 @@ cat <<EOF | sudo tee deploy-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: nginx-svc
+  name: hilltop-svc
 spec:
   selector:
-    app: nginx
+    app: hilltop-app
   ports:
   - protocol: TCP
     port: 80
@@ -519,28 +519,27 @@ Controllers are the brain behind k8s, they monitor k8s objects and respond accor
 - It creates pods across nodes to balance the load
 - replication controller is replaced by replicasets
 - it maintains the desired number of pods specified in your object definition file 
-```yaml
-cat <<EOF | sudo tee nginx-sts.yaml
-apiVersion: v1
-kind: ReplicationController    #DEPRICATED
+
+```
+apiVersion: apps/v1
+kind: ReplicaSet
 metadata:
-  name: myapp-rc
-      labels:
-        app: myapp
-        type: fe
+  name: myapp-replicaset
 spec:
-  template: # Here you provide a pod template which is intended to be managed by the replicationcontroller
+  replicas: 3 
+  selector:
+    matchLabels:
+      app: myapp  
+  template:
     metadata:
-        name: myapp 
-        labels:
-          app: myapp
-          type: front-end
+      labels:
+        app: myapp 
     spec:
-       container:
-       - name: nginx-container
-         image: nginx 
-  replicas: 3
-EOF
+      containers:
+        - name: myapp-container
+          image: hilltopconsultancy/docker:v2
+          ports:
+            - containerPort: 8080       
 ```
 ```sh
 - kubectl create -f <filename>
@@ -550,22 +549,18 @@ EOF
 + It helps the replica set define what pods fall under it although pod spec has already been mentioned in the spec
 + This is because it can manage pods that were not created to be managed by the rs
 ```yaml
-apiVersion: apps/v1
-kind: ReplicaSet
-metadata: 
-  name: myapp-rc
-  labels:
-    app: myapp 
-    type: front-end
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-service
 spec:
-  template:
-    container:
-    - name: nginx-container
-      image: nginx 
-  replicas: 3
   selector:
-    matchLabels:
-      type: front-end # This must match the label that was input in the object metadata section
+    app: myapp  # Matches the Pods managed by the ReplicaSet
+  ports:
+    - protocol: TCP
+      port: 80        # External service port
+      targetPort: 80  # Port inside the container
+  type: LoadBalancer  # Use 'NodePort' for internal access
 ```
 ### AUTOSCALER
 https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/
@@ -598,56 +593,148 @@ kubectl get hpa myapp-rc --watch
 k get pods 
 ```
 ### 4.  *STATEFULSETS:*
-+ StatefulSet is the workload API object used to manage stateful applications.
-+ Manages the deployment and scaling of a set of Pods, and provides guarantees about the ordering and uniqueness of these Pods
-+ Though susceptible to failure, they provide persistence to storage volumes and can match existing volumes to Pods replaced from failures
-+ Stable, unique network identifiers.
-+ Stable, persistent storage.
-+ Ordered, graceful deployment and scaling.
-+ Ordered, automated rolling updates.
-https://kubernetes.io/docs/tutorials/stateful-application/basic-stateful-set/
+## **📌 What is a StatefulSet?**
+A **StatefulSet** is a Kubernetes controller that manages **stateful applications**. Unlike a **ReplicaSet**, which creates identical Pods, a StatefulSet ensures that each Pod has:
+1. A **stable, unique identity** (e.g., `pod-0`, `pod-1`, `pod-2`).
+2. A **persistent storage volume** that remains even after a Pod is deleted.
+3. A **controlled deployment and scaling process** (Pods are started and terminated in order).
+
+### **📌 When to Use a StatefulSet?**
+✅ Databases (e.g., **MySQL, PostgreSQL, MongoDB, Cassandra**) that require persistent storage.  
+✅ Distributed applications that need **stable network identities** (e.g., **Kafka, Zookeeper, Elasticsearch**).  
+✅ Applications that require **ordered scaling & rolling updates**.
+
+---
+
+## **📌 Example 1: Basic StatefulSet for Nginx**
+This example deploys an **Nginx StatefulSet** where each Pod has a stable hostname and persistent storage.
+
 ```yaml
-cat <<EOF | sudo tee sts-service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: sts-service
-spec:
-  type: NodePort
-  ports:
-  - port: 80
-    targetPort: web
-    nodePort: 30007
-  selector:
-    app: example
-EOF
-```
-```yaml
-cat <<EOF | sudo tee sts-deploy.yaml
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: hilltop-sts
+  name: nginx-statefulset
 spec:
-  serviceName: "sts-service"
-  replicas: 5
+  serviceName: "nginx"
+  replicas: 3  # Deploy 3 replicas
   selector:
     matchLabels:
-      app: example
+      app: nginx
   template:
     metadata:
       labels:
-        app: example
+        app: nginx
     spec:
       containers:
-      - name: web
-        image: nginx:1.17.1
-        ports:
-        - containerPort: 80
-          name: web
-      terminationGracePeriodSeconds: 10
-EOF
+        - name: nginx
+          image: nginx:latest  # Container image
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-storage
+              mountPath: /usr/share/nginx/html  # Persistent storage mount
+  volumeClaimTemplates:
+    - metadata:
+        name: nginx-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi  # Persistent storage size
 ```
+
+### **🔹 What Happens?**
+- **Pods get stable names:** `nginx-0`, `nginx-1`, `nginx-2`.
+- **Each Pod gets a persistent volume** (`nginx-storage`).
+- **Scaling happens in order:** `nginx-0` starts first, then `nginx-1`, etc.
+- **If a Pod crashes, it is replaced with the same identity**.
+
+---
+
+## **📌 Example 2: StatefulSet for MySQL Database**
+This StatefulSet **deploys a MySQL database** with persistent storage.
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-statefulset
+spec:
+  serviceName: "mysql"
+  replicas: 3 
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:5.7
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "mypassword"
+          ports:
+            - containerPort: 3306
+          volumeMounts:
+            - name: mysql-storage
+              mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi  # Persistent storage for MySQL
+```
+
+### **🔹 What Happens?**
+- **Pods get stable identities:** `mysql-0`, `mysql-1`, `mysql-2`.
+- **Each MySQL Pod gets a unique storage volume** (so data is not lost if a Pod is deleted).
+- **Pods restart in sequence:** If `mysql-0` is down, Kubernetes restores it first before moving to `mysql-1`.
+
+---
+
+## **📌 How to Deploy a StatefulSet**
+1️⃣ **Apply the StatefulSet**  
+```bash
+kubectl apply -f statefulset.yaml
+```
+
+2️⃣ **Check the StatefulSet**  
+```bash
+kubectl get statefulsets
+```
+
+3️⃣ **Check the Pods**  
+```bash
+kubectl get pods -l app=nginx
+```
+
+4️⃣ **Check Persistent Volumes**  
+```bash
+kubectl get pvc
+```
+
+---
+
+## **📌 Key Differences: StatefulSet vs. ReplicaSet**
+| Feature        | StatefulSet | ReplicaSet |
+|---------------|------------|------------|
+| Pod Identity  | Unique, stable names (e.g., `pod-0`, `pod-1`) | Randomly assigned names |
+| Scaling       | Ordered (first `pod-0`, then `pod-1`) | All Pods created/deleted at once |
+| Storage       | Persistent storage for each Pod | Shared storage, ephemeral |
+| Use Case      | Databases, distributed systems | Stateless applications, web services |
+
+---
+
+## **📌 When to Use a StatefulSet?**
+✔️ **Use StatefulSet when your application needs stable identities and persistent storage** (e.g., databases, message queues, distributed systems).  
+❌ **Use ReplicaSet/Deployment for stateless apps** where Pod identity doesn’t matter.
+
 
 # 5. *DEAMONSETS:*
 
