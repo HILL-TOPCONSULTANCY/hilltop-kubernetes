@@ -599,14 +599,14 @@ A **StatefulSet** is a Kubernetes controller that manages **stateful application
 2. A **persistent storage volume** that remains even after a Pod is deleted.
 3. A **controlled deployment and scaling process** (Pods are started and terminated in order).
 
-## ** When to Use a StatefulSet?**
-✅ Databases (e.g., **MySQL, PostgreSQL, MongoDB, Cassandra**) that require persistent storage.  
-✅ Distributed applications that need **stable network identities** (e.g., **Kafka, Zookeeper, Elasticsearch**).  
-✅ Applications that require **ordered scaling & rolling updates**.
+## When to Use a StatefulSet?
+- Databases (e.g., **MySQL, PostgreSQL, MongoDB, Cassandra**) that require persistent storage.  
+- Distributed applications that need **stable network identities** (e.g., **Kafka, Zookeeper, Elasticsearch**).  
+- Applications that require **ordered scaling & rolling updates**.
 
 ---
 
-## ** Example 1: Basic StatefulSet for Nginx**
+## Example 1: Basic StatefulSet for Nginx
 This example deploys an **Nginx StatefulSet** where each Pod has a stable hostname and persistent storage.
 
 ```yaml
@@ -643,7 +643,7 @@ spec:
             storage: 1Gi  # Persistent storage size
 ```
 
-### **What Happens?**
+### What Happens?
 - **Pods get stable names:** `nginx-0`, `nginx-1`, `nginx-2`.
 - **Each Pod gets a persistent volume** (`nginx-storage`).
 - **Scaling happens in order:** `nginx-0` starts first, then `nginx-1`, etc.
@@ -651,7 +651,7 @@ spec:
 
 ---
 
-## ** Example 2: StatefulSet for MySQL Database**
+## Example 2: StatefulSet for MySQL Database
 This StatefulSet **deploys a MySQL database** with persistent storage.
 
 ```yaml
@@ -691,7 +691,7 @@ spec:
             storage: 5Gi  # Persistent storage for MySQL
 ```
 
-### **What Happens?**
+### What Happens?
 - **Pods get stable identities:** `mysql-0`, `mysql-1`, `mysql-2`.
 - **Each MySQL Pod gets a unique storage volume** (so data is not lost if a Pod is deleted).
 - **Pods restart in sequence:** If `mysql-0` is down, Kubernetes restores it first before moving to `mysql-1`.
@@ -720,7 +720,7 @@ kubectl get pvc
 
 ---
 
-## **Key Differences: StatefulSet vs. ReplicaSet**
+## Key Differences: StatefulSet vs. ReplicaSet
 | Feature        | StatefulSet | ReplicaSet |
 |---------------|------------|------------|
 | Pod Identity  | Unique, stable names (e.g., `pod-0`, `pod-1`) | Randomly assigned names |
@@ -729,10 +729,9 @@ kubectl get pvc
 | Use Case      | Databases, distributed systems | Stateless applications, web services |
 
 ---
-
-## **When to Use a StatefulSet?**
-✔️ **Use StatefulSet when your application needs stable identities and persistent storage** (e.g., databases, message queues, distributed systems).  
-❌ **Use ReplicaSet/Deployment for stateless apps** where Pod identity doesn’t matter.
+## When to Use a StatefulSet?
+**Use StatefulSet when your application needs stable identities and persistent storage** (e.g., databases, message queues, distributed systems).  
+**Use ReplicaSet/Deployment for stateless apps** where Pod identity doesn’t matter.
 
 
 # 5. *DEAMONSETS:*
