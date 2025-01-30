@@ -592,21 +592,21 @@ kubectl run -i --tty load-generator --rm --image=nginx --restart=Never -- /bin/s
 kubectl get hpa myapp-rc --watch
 k get pods 
 ```
-### 4.  *STATEFULSETS:*
-## **📌 What is a StatefulSet?**
+# 4.  *STATEFULSETS:*
+
 A **StatefulSet** is a Kubernetes controller that manages **stateful applications**. Unlike a **ReplicaSet**, which creates identical Pods, a StatefulSet ensures that each Pod has:
 1. A **stable, unique identity** (e.g., `pod-0`, `pod-1`, `pod-2`).
 2. A **persistent storage volume** that remains even after a Pod is deleted.
 3. A **controlled deployment and scaling process** (Pods are started and terminated in order).
 
-### **📌 When to Use a StatefulSet?**
+## ** When to Use a StatefulSet?**
 ✅ Databases (e.g., **MySQL, PostgreSQL, MongoDB, Cassandra**) that require persistent storage.  
 ✅ Distributed applications that need **stable network identities** (e.g., **Kafka, Zookeeper, Elasticsearch**).  
 ✅ Applications that require **ordered scaling & rolling updates**.
 
 ---
 
-## **📌 Example 1: Basic StatefulSet for Nginx**
+## ** Example 1: Basic StatefulSet for Nginx**
 This example deploys an **Nginx StatefulSet** where each Pod has a stable hostname and persistent storage.
 
 ```yaml
@@ -616,7 +616,7 @@ metadata:
   name: nginx-statefulset
 spec:
   serviceName: "nginx"
-  replicas: 3  # Deploy 3 replicas
+  replicas: 3
   selector:
     matchLabels:
       app: nginx
@@ -627,7 +627,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: nginx:latest  # Container image
+          image: nginx:latest
           ports:
             - containerPort: 80
           volumeMounts:
@@ -643,7 +643,7 @@ spec:
             storage: 1Gi  # Persistent storage size
 ```
 
-### **🔹 What Happens?**
+### **What Happens?**
 - **Pods get stable names:** `nginx-0`, `nginx-1`, `nginx-2`.
 - **Each Pod gets a persistent volume** (`nginx-storage`).
 - **Scaling happens in order:** `nginx-0` starts first, then `nginx-1`, etc.
@@ -651,7 +651,7 @@ spec:
 
 ---
 
-## **📌 Example 2: StatefulSet for MySQL Database**
+## ** Example 2: StatefulSet for MySQL Database**
 This StatefulSet **deploys a MySQL database** with persistent storage.
 
 ```yaml
@@ -691,37 +691,36 @@ spec:
             storage: 5Gi  # Persistent storage for MySQL
 ```
 
-### **🔹 What Happens?**
+### **What Happens?**
 - **Pods get stable identities:** `mysql-0`, `mysql-1`, `mysql-2`.
 - **Each MySQL Pod gets a unique storage volume** (so data is not lost if a Pod is deleted).
 - **Pods restart in sequence:** If `mysql-0` is down, Kubernetes restores it first before moving to `mysql-1`.
-
 ---
 
-## **📌 How to Deploy a StatefulSet**
-1️⃣ **Apply the StatefulSet**  
+## ** How to Deploy a StatefulSet**
+1 **Apply the StatefulSet**  
 ```bash
 kubectl apply -f statefulset.yaml
 ```
 
-2️⃣ **Check the StatefulSet**  
+2 **Check the StatefulSet**  
 ```bash
 kubectl get statefulsets
 ```
 
-3️⃣ **Check the Pods**  
+3 **Check the Pods**  
 ```bash
 kubectl get pods -l app=nginx
 ```
 
-4️⃣ **Check Persistent Volumes**  
+4 **Check Persistent Volumes**  
 ```bash
 kubectl get pvc
 ```
 
 ---
 
-## **📌 Key Differences: StatefulSet vs. ReplicaSet**
+## **Key Differences: StatefulSet vs. ReplicaSet**
 | Feature        | StatefulSet | ReplicaSet |
 |---------------|------------|------------|
 | Pod Identity  | Unique, stable names (e.g., `pod-0`, `pod-1`) | Randomly assigned names |
@@ -731,7 +730,7 @@ kubectl get pvc
 
 ---
 
-## **📌 When to Use a StatefulSet?**
+## **When to Use a StatefulSet?**
 ✔️ **Use StatefulSet when your application needs stable identities and persistent storage** (e.g., databases, message queues, distributed systems).  
 ❌ **Use ReplicaSet/Deployment for stateless apps** where Pod identity doesn’t matter.
 
