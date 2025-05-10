@@ -145,7 +145,7 @@ Here's a complete and **clearly explained Kubernetes YAML example** that:
 1. Deploys an `nginx` Pod using a **Deployment**
 2. Exposes it using a **Service**
 ---
-### nginx-pod.yaml
+### `nginx-pod.yaml`
 ```yaml
 apiVersion: v1                    # This is the API version for basic Kubernetes resources like Pods
 kind: Pod                         # The object type we're creating is a Pod
@@ -224,35 +224,6 @@ spec:
 | `containerPort`   | Port that the app inside the container listens to.                                                                                                     |
 | `ports` (Service) | List of port rules for how to forward traffic.                                                                                                         |
 | `type` (Service)  | Defines how the Service is exposed: `ClusterIP`, `NodePort`, `LoadBalancer`, etc.                                                                      |
-
----
-
-
-
----
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: my-app-pod
-  labels:
-    app: my-app
-spec:
-  containers:
-  - name: my-app-container
-    image: hilltopconsultancy/docker:v2
-    ports:
-    - containerPort: 80
-```
-
-#### Explanation:
-- **`apiVersion`**: Specifies the API version (`v1` for Pods).
-- **`kind`**: Identifies the resource type (`Pod`).
-- **`metadata`**: Contains metadata like the Pod’s name and labels.
-- **`spec`**: Specifies the Pod’s desired state.
-  - **`containers`**: Defines the containers in the Pod, their images, and configuration.
-  - **`ports`**: Specifies the ports the container exposes.
-
 ---
 
 ### **Pod Lifecycle**
@@ -341,60 +312,13 @@ Pods are often managed by higher-level Kubernetes resources:
    ```
 ---
 
-```bash
-source <(kubectl completion bash) # set up autocomplete in bash into the current shell, bash-completion package should be installed first.
-echo "source <(kubectl completion bash)" >> ~/.bashrc # add autocomplete permanently to your bash shell.
-alias k=kubectl
-complete -o default -F __start_kubectl k
-```
-```bash
-kubectl run nginx --image nginx
-```
-
-```
-+  example:
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: hilltop-app
-  labels:
-    app: hilltop-app
-spec:
-  containers:
-  - name: hilltop
-    image: hilltopconsultancy/docker:v2
-    ports:
-    - containerPort: 8080
-
-```
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: hilltop-nodeport
-spec:
-  selector:
-    app: nginx
-  ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 80
-    nodePort: 30036
-
-```
-kubectl apply -f nginx-nodeport-service.yaml
-
-```sh
-kubectl apply -f nginx-clusterip-service.yaml
-```
 # Apply the configuration and access on the browser
 ```sh
 kubectl get pods -o wide
 kubectl get service -o wide
 ```
 
-+ Copy the public IPV4 Address og the pod node hosting the pod
++ Copy the public IPV4 Address of the pod node hosting the pod
 + Access the UI of the application using curl _**http://(public-ip):(NodePort)**_
 ```sh
 - kubectl apply/create -f <filename> #to create declaratively from a yml file
@@ -433,6 +357,7 @@ It is used to manage and maintain the desired state of an application running in
 A Deployment is defined in a YAML or JSON file. Below is an example YAML file:
 
 ```yaml
+### `deployment.yaml`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -530,7 +455,7 @@ kubectl delete deployment devops-app-deployment
 ---
 
 ```yaml
-cat <<EOF | sudo tee deploy.yaml
+`deploy.yaml`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -550,10 +475,9 @@ spec:
         image: hilltopconsultancy/docker:v2
         ports:
         - containerPort: 8080
-EOF
 ```
 ```yaml
-cat <<EOF | sudo tee deploy-service.yaml
+### `deploy-service.yaml`
 apiVersion: v1
 kind: Service
 metadata:
