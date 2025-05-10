@@ -356,8 +356,10 @@ It is used to manage and maintain the desired state of an application running in
 
 A Deployment is defined in a YAML or JSON file. Below is an example YAML file:
 
-```yaml
+
 ### `deployment.yaml`
+
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -454,8 +456,9 @@ kubectl delete deployment devops-app-deployment
 
 ---
 
+
+### `deploy.yaml`
 ```yaml
-`deploy.yaml`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -476,8 +479,9 @@ spec:
         ports:
         - containerPort: 8080
 ```
-```yaml
+
 ### `deploy-service.yaml`
+```yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -517,7 +521,8 @@ Controllers are the brain behind k8s, they monitor k8s objects and respond accor
 - replication controller is replaced by replicasets
 - it maintains the desired number of pods specified in your object definition file 
 
-```
+### `rs.yaml`
+```yaml
 apiVersion: apps/v1
 kind: ReplicaSet
 metadata:
@@ -562,8 +567,10 @@ spec:
 ### AUTOSCALER
 https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/
 You can use a Horizontal Pod AutoScaler (HPA)
+
+# kubectl autoscale rs myapp-rc --cpu-percent=50 --min=1 --max=10
+### `autoscalaer.yaml`
 ```yaml
-#kubectl autoscale rs myapp-rc --cpu-percent=50 --min=1 --max=10
 apiVersion: autoscaling/v1
 kind: HorizontalPodAutoscaler
 metadata:
@@ -606,6 +613,7 @@ A **StatefulSet** is a Kubernetes controller that manages **stateful application
 ## Example 1: Basic StatefulSet for Nginx
 This example deploys an **Nginx StatefulSet** where each Pod has a stable hostname and persistent storage.
 
+### `statefulset.yaml`
 ```yaml
 apiVersion: apps/v1
 kind: StatefulSet
@@ -737,8 +745,10 @@ kubectl get pvc
 + The deamonset ensures that one copy of the pod is always running on every node in the cluster.
 + A use case is if you are deploying a log collecting or monitoring agent.
 + objects like the kube-proxy and network use deamonsets because they have to run on every node.
+
+  
+ ### `deamonset.yaml`
 ```yaml
-cat <<EOF | sudo tee ds-deploy.yaml
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -784,7 +794,6 @@ spec:
       - name: varlog
         hostPath:
           path: /var/log
-EOF
 ```
 ```sh
 k create -f <filename>
