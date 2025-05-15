@@ -550,6 +550,8 @@ spec:
 + replicasets requires a selector field | it is not a must
 + It helps the replica set define what pods fall under it although pod spec has already been mentioned in the spec
 + This is because it can manage pods that were not created to be managed by the rs
+
+`svc.yaml`
 ```yaml
 apiVersion: v1
 kind: Service
@@ -568,7 +570,7 @@ spec:
 https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/
 You can use a Horizontal Pod AutoScaler (HPA)
 
-# kubectl autoscale rs myapp-rc --cpu-percent=50 --min=1 --max=10
++ kubectl autoscale rs myapp-rc --cpu-percent=50 --min=1 --max=10
 ### `autoscalaer.yaml`
 ```yaml
 apiVersion: autoscaling/v1
@@ -613,7 +615,7 @@ A **StatefulSet** is a Kubernetes controller that manages **stateful application
 ## Example 1: Basic StatefulSet for Nginx
 This example deploys an **Nginx StatefulSet** where each Pod has a stable hostname and persistent storage.
 
-### `statefulset.yaml`
+ `statefulset.yaml`
 ```yaml
 apiVersion: apps/v1
 kind: StatefulSet
@@ -658,7 +660,7 @@ spec:
 
 ## Example 2: StatefulSet for MySQL Database
 This StatefulSet **deploys a MySQL database** with persistent storage.
-
+ `statefulset.yaml`
 ```yaml
 apiVersion: apps/v1
 kind: StatefulSet
@@ -746,8 +748,7 @@ kubectl get pvc
 + A use case is if you are deploying a log collecting or monitoring agent.
 + objects like the kube-proxy and network use deamonsets because they have to run on every node.
 
-  
- ### `deamonset.yaml`
+`deamonset.yaml`
 ```yaml
 apiVersion: apps/v1
 kind: DaemonSet
@@ -839,8 +840,8 @@ https://kubernetes.io/docs/concepts/services-networking/service/
 
 A. **Deployment Configuration:**
 
+ `svc-deploy.yaml`
 ```yaml
-cat <<EOF | sudo tee svc-deploy.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -860,7 +861,6 @@ spec:
         image: nginx:latest
         ports:
         - containerPort: 80
-EOF
 ```
 
 ### 1. ClusterIP Service
@@ -872,8 +872,8 @@ EOF
 
 1. Create the service definition:
 
+ `svc-deploy.yaml`
 ```yaml
-cat <<EOF | sudo tee clusterip-svc.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -884,8 +884,8 @@ spec:
     app: nginx
   ports:
     - port: 80
-      targetPort: 80
-EOF
+  nodePort: 31000
+
 ```
 
 Save this as `clusterip-svc.yaml` and deploy it:
@@ -925,7 +925,7 @@ kubectl delete svc nginx-clusterip
 1. Create the service definition:
 
 ```yaml
-cat <<EOF | sudo tee nodeport-service.yaml
+ `svc-deploy.yaml`
 apiVersion: v1
 kind: Service
 metadata:
@@ -938,7 +938,6 @@ spec:
     - port: 80
       targetPort: 80
       nodePort: 30007
-EOF
 ```
 
 Save this as `nodeport-service.yaml` and deploy it:
@@ -973,11 +972,33 @@ kubectl delete svc nginx-nodeport
 - **LoadBalancer** exposes the service externally through a cloud provider’s load balancer. This service type is most beneficial when running on a cloud platform that supports automatic load balancers, providing a way to distribute traffic across several instances of the application.
 
 **Deploy LoadBalancer Service:**
-
+```bash
+eksctl create iamserviceaccount \
+  --cluster=eks-dribe-${ENV} \
+  --namespace=kube-system \
+  --name=aws-load-balancer-controller \
+  --role-name AmazonEKSLoadBalancerController \
+  --attach-policy-arn=arn:aws:iam:<ACCOUNT_ID>:<:policy/AWSLoadBalancerControllerIAMPolicy \
+  --approve
+```
+```bash
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update eks
+```
+```bash
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=eks-dribe-${ENV} \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller
+```
+```bash
+kubectl apply -k "github.com/aws/eks-charts/stable/aws-load-balancer-controller/crds?ref=master"
+```
 1. Create the service definition:
 
 ```yaml
-cat <<EOF | sudo tee loadbalancer-service.yaml
+ `lb-deploy.yaml`
 apiVersion: v1
 kind: Service
 metadata:
@@ -989,7 +1010,6 @@ spec:
   ports:
     - port: 80
       targetPort: 80
-EOF
 ```
 
 Save this as `loadbalancer-service.yaml` and deploy it:
@@ -1043,21 +1063,20 @@ kubectl create configmap <ConfigName> --from-literal=APP_COLOR=blue \
 kubectl create configmap app-config --from-file=<pathtofile>
 ```
 ```yaml
-cat <<EOF | sudo tee cm.yaml
+ `cm.yaml`
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: webapp-color-cm
 data:
   app-color: green
-EOF
 ```
 kubectl get configmaps
 
 
 to inject the  env to the running container, add the envFrom section under the spec section  
 ```sh
-cat <<EOF | sudo tee deploy-cm.yaml
+ `cm-deploy.yaml`
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1086,12 +1105,11 @@ spec:
             valueFrom:
               configMap:
                 name: webapp-color-cm
-EOF
 ```
 to create a resource, use kubectl create -f <filename>
 
 ```sh
-cat <<EOF | sudo tee svc-cm.yaml
+ `cm-svc-deploy.yaml`
 apiVersion: v1
 kind: Service
 metadata:
@@ -1108,7 +1126,6 @@ spec:
   selector:
     run: webapp-color
   type: NodePort
-EOF
 ```
 You can also ref a single env from a configmap 
 ```sh
