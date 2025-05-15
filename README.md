@@ -972,9 +972,10 @@ kubectl delete svc nginx-nodeport
 - **LoadBalancer** exposes the service externally through a cloud provider’s load balancer. This service type is most beneficial when running on a cloud platform that supports automatic load balancers, providing a way to distribute traffic across several instances of the application.
 
 **Deploy LoadBalancer Service:**
+https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html
 ```bash
 eksctl create iamserviceaccount \
-  --cluster=eks-dribe-${ENV} \
+  --cluster=eks-hilltop-prod \
   --namespace=kube-system \
   --name=aws-load-balancer-controller \
   --role-name AmazonEKSLoadBalancerController \
@@ -988,7 +989,7 @@ helm repo update eks
 ```bash
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
-  --set clusterName=eks-dribe-${ENV} \
+  --set clusterName=eks-hilltop-prod \
   --set serviceAccount.create=false \
   --set serviceAccount.name=aws-load-balancer-controller
 ```
