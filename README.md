@@ -1003,14 +1003,18 @@ kubectl apply -k "github.com/aws/eks-charts/stable/aws-load-balancer-controller/
 apiVersion: v1
 kind: Service
 metadata:
-  name: nginx-loadbalancer
+  name: lb-svc
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: alb
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing # or internal
 spec:
   type: LoadBalancer
   selector:
-    app: nginx
+    app: webapp
   ports:
     - port: 80
-      targetPort: 80
+      targetPort: 8080
+      protocol: TCP
 ```
 
 Save this as `loadbalancer-service.yaml` and deploy it:
