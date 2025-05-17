@@ -969,80 +969,187 @@ kubectl delete svc nginx-nodeport
 ### 3. LoadBalancer Service
 
 **Definition and Use Case:**
-- **LoadBalancer** exposes the service externally through a cloud provider’s load balancer. This service type is most beneficial when running on a cloud platform that supports automatic load balancers, providing a way to distribute traffic across several instances of the application.
+- **LoadBalancer** exposes the service externally through a cloud provider’s load balancer.
+- This service type is most beneficial when running on a cloud platform that supports automatic load balancers, providing a way to distribute traffic across several instances of the application.
 
 **Deploy LoadBalancer Service:**
-https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html
+# AWS Application Load Balancer (ALB) Installation Guide for EKS
+
+## Prerequisites
+- AWS CLI configured with appropriate permissions
+- `eksctl` installed
+- `kubectl` installed and configured to access your EKS cluster
+- Helm installed
+- An existing EKS cluster
+
+### 1. Download IAM Policy
+Download the IAM policy required for the AWS Load Balancer Controller:
+```bash
+curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json
+```
+
+### 2. Create IAM Policy
+Create the IAM policy in your AWS account:
+```bash
+aws iam create-policy \
+    --policy-name AWSLoadBalancerControllerIAMPolicy \
+    --policy-document file://iam_policy.json
+```
+
+### 3. Associate IAM OIDC Provider
+Associate the IAM OIDC provider for your cluster:
+```bash
+eksctl utils associate-iam-oidc-provider \
+    --region eu-central-1 \
+    --cluster eks-hilltop-prod \
+    --approve
+```
+
+### 4. Create IAM Service Account
+Create an IAM service account for the controller:
 ```bash
 eksctl create iamserviceaccount \
-  --cluster=eks-hilltop-prod \
-  --namespace=kube-system \
-  --name=aws-load-balancer-controller \
-  --role-name AmazonEKSLoadBalancerController \
-  --attach-policy-arn=arn:aws:iam:<ACCOUNT_ID>:<:policy/AWSLoadBalancerControllerIAMPolicy \
-  --approve
+    --cluster=eks-hilltop-prod \
+    --namespace=kube-system \
+    --name=aws-load-balancer-controller \
+    --role-name AmazonEKSLoadBalancerController \
+    --attach-policy-arn arn:aws:iam::<YOUR_ACCOUNT_ID>:policy/AWSLoadBalancerControllerIAMPolicy \
+    --approve
 ```
+
+### 5. Add Helm Repository
+Add the EKS Helm repository:
 ```bash
 helm repo add eks https://aws.github.io/eks-charts
 helm repo update eks
 ```
+
+### 6. Install AWS Load Balancer Controller
+Install the controller using Helm:
 ```bash
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
-  -n kube-system \
-  --set clusterName=eks-hilltop-prod \
-  --set serviceAccount.create=false \
-  --set serviceAccount.name=aws-load-balancer-controller
+    -n kube-system \
+    --set clusterName=eks-hilltop-prod \
+    --set serviceAccount.create=false \
+    --set serviceAccount.name=aws-load-balancer-controller \
+    --set region=eu-central-1 \
+    --set vpcId=<YOUR_VPC_ID> \
+    --version 1.13.0
 ```
-```bash
-kubectl apply -k "github.com/aws/eks-charts/stable/aws-load-balancer-controller/crds?ref=master"
-```
-1. Create the service definition:
 
+### 7. Apply CRDs
+Apply the Custom Resource Definitions:
+```bash
+curl -O https://raw.githubusercontent.com/aws/eks-charts/master/stable/aws-load-balancer-controller/crds/crds.yaml
+kubectl apply -f crds.yaml
+```
+
+### 8. Verify Installation
+Verify the controller is running:
+```bash
+kubectl get deployment -n kube-system aws-load-balancer-controller
+```
+
+## Deploying a Sample Application with LoadBalancer Service
+
+### 1. Create a Sample Deployment
+Create a deployment file `sample-deployment.yaml`:
 ```yaml
- `lb-deploy.yaml`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: color-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: color-app
+  template:
+    metadata:
+      labels:
+        app: color-app
+    spec:
+      containers:
+      - name: color-app
+        image: hilltopconsultancy/colorapp:orange
+        ports:
+        - containerPort: 8080
+```
+
+Apply the deployment:
+```bash
+kubectl apply -f sample-deployment.yaml
+```
+
+### 2. Create a LoadBalancer Service
+Create a service file `loadbalancer-service.yaml`:
+```yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: lb-svc
+  name: color-service
   annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: alb
-    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing # or internal
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
 spec:
-  type: LoadBalancer
   selector:
-    app: webapp
+    app: color-app
   ports:
-    - port: 80
+    - protocol: TCP
+      port: 80
       targetPort: 8080
-      protocol: TCP
+  type: LoadBalancer
 ```
 
-Save this as `loadbalancer-service.yaml` and deploy it:
-
+Apply the service:
 ```bash
 kubectl apply -f loadbalancer-service.yaml
 ```
 
-**Accessing the Application:**
+## Testing the Load Balancer
 
-- Once deployed, the LoadBalancer service will provision an external IP:
-
+### 1. Check Service Status
 ```bash
-kubectl get svc nginx-loadbalancer
+kubectl get svc sample-service
 ```
 
-- Use the external IP to access Nginx:
+Wait until the `EXTERNAL-IP` column shows a DNS name (this may take a few minutes).
 
+### 2. Access the Application
+Once the LoadBalancer is provisioned, you can access it using the provided DNS name:
 ```bash
-curl http://<External_IP>
+curl http://<LOAD_BALANCER_DNS>
 ```
 
-**Delete the LoadBalancer Service:**
+You should see the default COLOR welcome page.
 
+### 3. Verify Load Balancer in AWS Console
+1. Go to the AWS Management Console
+2. Navigate to EC2 > Load Balancers
+3. You should see a new load balancer created for your service
+
+## Cleanup
+
+To remove the resources:
 ```bash
-kubectl delete svc nginx-loadbalancer
+kubectl delete -f loadbalancer-service.yaml
+kubectl delete -f sample-deployment.yaml
+helm uninstall aws-load-balancer-controller -n kube-system
 ```
 
+## Troubleshooting
+
+If the LoadBalancer is not being created:
+1. Check controller logs:
+   ```bash
+   kubectl logs -n kube-system deployment/aws-load-balancer-controller
+   ```
+2. Verify IAM permissions
+3. Check for errors in the service events:
+   ```bash
+   kubectl describe svc sample-service
+   ```
 # STORAGE:
 ## VOLUMES:
 Files in a container are ephemeral and they will be lost once the container fails or is stopped
@@ -1050,103 +1157,249 @@ The container is recreated in a clean state and all volumes I lost
 + Therefore persisting volumes are essential in k8s as they persistent volumes exist beyond the lifetime of a pod.
 + These persistent volumes can be a directory that can be used by Pods or shared by containers running in a Pod
 
-## Types of Volumes:
-### 1. *ConfigMaps:*
+# Kubernetes ConfigMaps Guide
 
-+ A ConfigMap provides a way to inject configuration data into pods.
-+ This is a way of managing environmental variables in k8s. you can manually inject this variable by passing them as env.
-+ The most critical role that ConfigMaps play is making applications portable by separating the application code from configuration settings.
-+ This separation makes it possible to efficiently migrate from a development environment to a test environment and, eventually, a production environment.
-+ But with many def files that require this variable, then you need to create them as a separate object in k8s 
-and simply reference them in your object definition file. This can be done using ConfigMaps and Secrets.
+Based on [Kubernetes Official Documentation](https://kubernetes.io/docs/concepts/configuration/configmap/)
 
-ConfigMaps are used to pass configuration data in the form of key-value pairs in k8s and then injected into pods.
-```sh
-kubectl create configmap <ConfigName> --from-literal=APP_COLOR=blue \
-                                   --from-literal=APP_MODE=prod  
-                   OR 
-kubectl create configmap app-config --from-file=<pathtofile>
+## Overview
+A ConfigMap is an API object used to store non-confidential data in key-value pairs. Pods can consume ConfigMaps as environment variables, command-line arguments, or as configuration files in a volume. ConfigMaps allow you to decouple environment-specific configuration from your container images, making your applications easily portable.
+
+## Key Features
+- Stores configuration data separately from application code
+- Can be mounted as data volumes or exposed as environment variables
+- Namespace-scoped (exist within a single namespace)
+- Can be updated without rebuilding images
+- Supports UTF-8 strings up to 1MiB in size
+
+## Creating ConfigMaps
+
+### 1. From Literal Values
+```bash
+kubectl create configmap app-config \
+  --from-literal=COLOR=red \
+  --from-literal=ENVIRONMENT=production \
+  --from-literal=LOG_LEVEL=debug
 ```
+
+### 2. From YAML File
+Create `app-config.yaml`:
 ```yaml
- `cm.yaml`
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: webapp-color-cm
+  name: app-config
 data:
-  app-color: green
+  COLOR: red
+  ENVIRONMENT: production
+  LOG_LEVEL: debug
+  UI_PROPERTIES_FILE_NAME: ui.properties
 ```
-kubectl get configmaps
 
+Apply the ConfigMap:
+```bash
+kubectl apply -f app-config.yaml
+```
 
-to inject the  env to the running container, add the envFrom section under the spec section  
-```sh
- `cm-deploy.yaml`
+## Using ConfigMaps in Pods
+
+### Example 1: Using All Environment Variables from ConfigMap
+
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  creationTimestamp: null
-  labels:
-    app: dep-web-color
-  name: dep-web-color
+  name: colorapp-deployment
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
-      app: dep-web-color
-  strategy: {}
+      app: colorapp
   template:
     metadata:
-      creationTimestamp: null
       labels:
-        app: dep-web-color
+        app: colorapp
     spec:
       containers:
-      - image: kodekloud/webapp-color:latest
-        name: webapp-color
-        imagePullPolicy: IfNotPresent
-        env:
-          - name: APP_COLOR
-            valueFrom:
-              configMap:
-                name: webapp-color-cm
+      - name: colorapp
+        image: hilltopconsultancy/colorapp:orange
+        ports:
+        - containerPort: 8080
+        envFrom:
+          - configMapRef:
+              name: app-config
 ```
-to create a resource, use kubectl create -f <filename>
 
-```sh
- `cm-svc-deploy.yaml`
+### Example 2: Using Specific Environment Variables from ConfigMap
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: colorapp-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: colorapp
+  template:
+    metadata:
+      labels:
+        app: colorapp
+    spec:
+      containers:
+      - name: colorapp
+        image: hilltopconsultancy/colorapp:orange
+        ports:
+        - containerPort: 8080
+        env:
+          - name: COLOR
+            valueFrom:
+              configMapKeyRef:
+                name: app-config
+                key: COLOR
+          - name: LOG_LEVEL
+            valueFrom:
+              configMapKeyRef:
+                name: app-config
+                key: LOG_LEVEL
+```
+
+### Example 3: Using ConfigMap as Volume
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: colorapp-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: colorapp
+  template:
+    metadata:
+      labels:
+        app: colorapp
+    spec:
+      containers:
+      - name: colorapp
+        image: hilltopconsultancy/colorapp:orange
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: app-config
+```
+
+## Complete Deployment Example
+
+1. Create the ConfigMap (`app-config.yaml`):
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  COLOR: red
+  ENVIRONMENT: production
+  LOG_LEVEL: debug
+  APP_NAME: ColorApp
+```
+
+2. Create the Deployment (`colorapp-deployment.yaml`):
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: colorapp-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: colorapp
+  template:
+    metadata:
+      labels:
+        app: colorapp
+    spec:
+      containers:
+      - name: colorapp
+        image: hilltopconsultancy/colorapp:orange
+        ports:
+        - containerPort: 8080
+        envFrom:
+          - configMapRef:
+              name: app-config
+```
+
+3. Create the Service (`colorapp-service.yaml`):
+```yaml
 apiVersion: v1
 kind: Service
 metadata:
-  creationTimestamp: null
-  labels:
-    run: webapp-color
-  name: webapp-color
+  name: colorapp-service
 spec:
-  ports:
-  - port: 8080
-    protocol: TCP
-    targetPort: 8080
-    nodePort: 30080
-  selector:
-    run: webapp-color
   type: NodePort
+  selector:
+    app: colorapp
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+      nodePort: 30080
 ```
-You can also ref a single env from a configmap 
-```sh
-env:
-  - name: APP_COLOR
-  valueFrom:
-    configMapKeyRef:
-      name: webapp-color-cm
-      key: app-color
+
+## Deploying the Application
+
+```bash
+kubectl apply -f app-config.yaml
+kubectl apply -f colorapp-deployment.yaml
+kubectl apply -f colorapp-service.yaml
 ```
-You can also inject it as a volume
-```sh
-volumes:
-- name: app-config-volume
-  ConfigMap:
-    name: webapp-color-cm
+
+## Verifying Configuration
+
+1. Check environment variables in a pod:
+```bash
+kubectl exec -it pod/colorapp -- sh -c "printenv"
+```
+
+2. Check the application logs:
+```bash
+kubectl logs -l app=colorapp
+```
+
+## Updating ConfigMaps
+
+1. Edit the ConfigMap:
+```bash
+kubectl edit configmap app-config
+```
+
+2. Update the COLOR value to a different color (e.g., blue)
+
+3. Restart the pods to pick up changes:
+```bash
+kubectl rollout restart deployment colorapp-deployment
+```
+
+## Best Practices
+- ConfigMaps should be used for non-sensitive configuration only
+- ConfigMaps are namespace-scoped
+- Consider using immutable ConfigMaps for configurations that don't need updates
+- The total size of a ConfigMap must be less than 1MiB
+- When mounted as volumes, ConfigMap updates are eventually consistent
+
+## Cleanup
+
+```bash
+kubectl delete -f colorapp-service.yaml
+kubectl delete -f colorapp-deployment.yaml
+kubectl delete -f app-config.yaml
 ```
 ### 2. *emptyDir:*
 
