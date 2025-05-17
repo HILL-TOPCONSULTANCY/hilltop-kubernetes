@@ -992,49 +992,50 @@ curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-cont
 Create the IAM policy in your AWS account:
 ```bash
 aws iam create-policy \
-    --policy-name AWSLoadBalancerControllerIAMPolicy \
-    --policy-document file://iam_policy.json
+  --policy-name AWSLoadBalancerControllerIAMPolicy \
+  --policy-document file://iam_policy.json
 ```
 
 ### 3. Associate IAM OIDC Provider
 Associate the IAM OIDC provider for your cluster:
 ```bash
 eksctl utils associate-iam-oidc-provider \
-    --region eu-central-1 \
-    --cluster eks-hilltop-prod \
-    --approve
+  --region eu-central-1 \
+  --cluster eks-hilltop-prod \
+  --approve
 ```
 
 ### 4. Create IAM Service Account
 Create an IAM service account for the controller:
 ```bash
 eksctl create iamserviceaccount \
-    --cluster=eks-hilltop-prod \
-    --namespace=kube-system \
-    --name=aws-load-balancer-controller \
-    --role-name AmazonEKSLoadBalancerController \
-    --attach-policy-arn arn:aws:iam::<YOUR_ACCOUNT_ID>:policy/AWSLoadBalancerControllerIAMPolicy \
-    --approve
+  --region eu-central-1 \
+  --cluster eks-hilltop-prod \
+  --namespace kube-system \
+  --name aws-load-balancer-controller \
+  --role-name AmazonEKSLoadBalancerController \
+  --attach-policy-arn arn:aws:iam::0504516180:policy/AWSLoadBalancerControllerIAMPolicy \
+  --approve
 ```
 
 ### 5. Add Helm Repository
 Add the EKS Helm repository:
 ```bash
 helm repo add eks https://aws.github.io/eks-charts
-helm repo update eks
+helm repo update
 ```
 
 ### 6. Install AWS Load Balancer Controller
 Install the controller using Helm:
 ```bash
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
-    -n kube-system \
-    --set clusterName=eks-hilltop-prod \
-    --set serviceAccount.create=false \
-    --set serviceAccount.name=aws-load-balancer-controller \
-    --set region=eu-central-1 \
-    --set vpcId=<YOUR_VPC_ID> \
-    --version 1.13.0
+  -n kube-system \
+  --set clusterName=eks-hilltop-prod \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller \
+  --set region=eu-central-1 \
+  --set vpcId=vpc-05bd534e99630eca3 \
+  --version 1.13.0
 ```
 
 ### 7. Apply CRDs
