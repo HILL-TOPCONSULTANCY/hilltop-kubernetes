@@ -1174,27 +1174,13 @@ The **AWS Load Balancer Controller** is required to implement Ingress rules by p
 2. Click **Request certificate**
 3. Select **Public certificate**
 4. Add domain names:
-   - **Primary domain:** `colorapp.hilltopdevops.com`
+   - **Fully qualified Domain:** `colorapp.hilltopdevops.com`
    - (Optional) Add wildcard: `*.hilltopdevops.com`
 5. Choose **DNS validation**
 6. Click **Request**
 7. In certificate list, select your new certificate
 8. Click **Create records in Route53** (AWS will auto-create validation records)
 9. Wait 5-30 minutes for status to change from **Pending validation** → **Issued**
-
-### **Step 2: Create Subdomain in Route53**
-1. Go to **Route53 Console** (https://console.aws.amazon.com/route53)
-2. Select your hosted zone: **hilltopdevops.com**
-3. Click **Create record**
-4. Configure:
-   - **Record name:** `colorapp`
-   - **Record type:** `A`
-   - **Alias:** Enable
-   - **Route traffic to:** 
-     - Select **Alias to Application and Classic Load Balancer**
-     - Choose region: **eu-north-1**
-     - (We'll select the ALB after creating the Ingress)
-5. Click **Create records**
 
 ---
 
@@ -1284,7 +1270,21 @@ kubectl apply -f color-app-ingress.yaml
 ```
 
 ---
+### **Step 2: Create Subdomain in Route53**
+1. Go to **Route53 Console** (https://console.aws.amazon.com/route53)
+2. Select your hosted zone: **hilltopdevops.com**
+3. Click **Create record**
+4. Configure:
+   - **Record name:** `colorapp`
+   - **Record type:** `A`
+   - **Alias:** Enable
+   - **Route traffic to:** 
+     - Select **Alias to Application and Classic Load Balancer**
+     - Choose region: **eu-north-1**
+     - (We'll select the ALB after creating the Ingress)
+5. Click **Create records**
 
+---
 ## **4. Final Configuration in AWS Console**
 
 ### **Step 6: Update Route53 ALB Target**
