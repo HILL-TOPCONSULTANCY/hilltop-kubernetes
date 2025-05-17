@@ -1150,6 +1150,200 @@ If the LoadBalancer is not being created:
    ```bash
    kubectl describe svc sample-service
    ```
+---
+# **AWS ALB Ingress with TLS: Complete Step-by-Step Guide**
+
+## **1. Definitions**
+### **What is an Ingress?**
+An Ingress is a Kubernetes resource that manages external access to HTTP/HTTPS services in a cluster. It provides:
+- **Load balancing** (distributes traffic to pods)
+- **SSL/TLS termination** (HTTPS support)
+- **Host-based routing** (`app1.domain.com`, `app2.domain.com`)
+- **Path-based routing** (`/api`, `/web`)
+
+### **What is an Ingress Controller?**
+The **AWS Load Balancer Controller** is required to implement Ingress rules by provisioning an Application Load Balancer (ALB). We already installed this in previous steps(alb).
+
+---
+
+## **2. AWS Console Setup (Certificate + Domain)**
+
+### **Step 1: Create TLS Certificate in AWS ACM**
+1. Go to **AWS ACM Console** (https://console.aws.amazon.com/acm)
+2. Click **Request certificate**
+3. Select **Public certificate**
+4. Add domain names:
+   - **Primary domain:** `colorapp.hilltopdevops.com`
+   - (Optional) Add wildcard: `*.hilltopdevops.com`
+5. Choose **DNS validation**
+6. Click **Request**
+7. In certificate list, select your new certificate
+8. Click **Create records in Route53** (AWS will auto-create validation records)
+9. Wait 5-30 minutes for status to change from **Pending validation** → **Issued**
+
+### **Step 2: Create Subdomain in Route53**
+1. Go to **Route53 Console** (https://console.aws.amazon.com/route53)
+2. Select your hosted zone: **hilltopdevops.com**
+3. Click **Create record**
+4. Configure:
+   - **Record name:** `colorapp`
+   - **Record type:** `A`
+   - **Alias:** Enable
+   - **Route traffic to:** 
+     - Select **Alias to Application and Classic Load Balancer**
+     - Choose region: **eu-north-1**
+     - (We'll select the ALB after creating the Ingress)
+5. Click **Create records**
+
+---
+
+## **3. Kubernetes Deployment**
+
+### **Step 3: Deploy Application**
+```yaml
+# color-app-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: color-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: color-app
+  template:
+    metadata:
+      labels:
+        app: color-app
+    spec:
+      containers:
+      - name: color-app
+        image: hilltopconsultancy/colorapp:orange
+        ports:
+        - containerPort: 8080
+        env:
+        - name: COLOR
+          value: "orange"
+```
+
+```bash
+kubectl apply -f color-app-deployment.yaml
+```
+
+### **Step 4: Create ClusterIP Service**
+```yaml
+# color-app-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: color-app-service
+spec:
+  type: ClusterIP
+  selector:
+    app: color-app
+  ports:
+    - port: 80
+      targetPort: 8080
+```
+
+```bash
+kubectl apply -f color-app-service.yaml
+```
+
+### **Step 5: Create Ingress Resource**
+```yaml
+# color-app-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: color-app-ingress
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-central-1:050451396180:certificate/YOUR_CERT_ID
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+spec:
+  ingressClassName: alb
+  rules:
+  - host: colorapp.hilltopdevops.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: color-app-service
+            port:
+              number: 80
+```
+
+```bash
+kubectl apply -f color-app-ingress.yaml
+```
+
+---
+
+## **4. Final Configuration in AWS Console**
+
+### **Step 6: Update Route53 ALB Target**
+1. Get ALB DNS name:
+   ```bash
+   kubectl get ingress color-app-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+   ```
+   Example output: `k8s-default-colorapp-ingress-xxxx.elb.eu-central-1.amazonaws.com`
+
+2. Go back to **Route53 Console** → **hilltopdevops.com**
+3. Edit the `colorapp` A record:
+   - Update **Alias target** to your ALB DNS name
+   - Save changes
+
+---
+
+## **5. Verification**
+
+### **Step 7: Test Your Setup**
+1. Wait 2-5 minutes for DNS propagation
+2. Access your application:
+   ```bash
+   curl -v https://colorapp.hilltopdevops.com
+   ```
+3. Verify:
+   - HTTPS works (padlock icon in browser)
+   - HTTP → HTTPS redirect works:
+     ```bash
+     curl -v http://colorapp.hilltopdevops.com
+     ```
+   - Should return `301 Moved Permanently` to HTTPS
+
+---
+
+## **Troubleshooting**
+- **Certificate not validating?**
+  - Check ACM console for validation status
+  - Verify CNAME records exist in Route53
+- **ALB not created?**
+  ```bash
+  kubectl describe ingress color-app-ingress
+  ```
+  Look for errors in events
+- **DNS not resolving?**
+  ```bash
+  dig colorapp.hilltopdevops.com
+  ```
+  Should return ALB DNS name
+
+---
+
+## **Cleanup**
+```bash
+kubectl delete -f color-app-ingress.yaml
+kubectl delete -f color-app-service.yaml
+kubectl delete -f color-app-deployment.yaml
+# Delete ACM certificate and Route53 records via AWS Console if no longer needed
+```
+
+---
 # STORAGE:
 ## VOLUMES:
 Files in a container are ephemeral and they will be lost once the container fails or is stopped
