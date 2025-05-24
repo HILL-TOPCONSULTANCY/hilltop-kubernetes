@@ -660,7 +660,7 @@ spec:
     spec:
       containers:
         - name: colorapp
-          image: hilltopconsultancy/colorapp:grey
+          image: hilltopconsultancy/globe:v1
           ports:
             - containerPort: 80
           volumeMounts:
@@ -1112,7 +1112,7 @@ spec:
     spec:
       containers:
       - name: color-app
-        image: hilltopconsultancy/colorapp:orange
+        image: hilltopconsultancy/globe:v1
         ports:
         - containerPort: 8080
         env:
@@ -1351,7 +1351,7 @@ spec:
     spec:
       containers:
       - name: colorapp
-        image: hilltopconsultancy/colorapp:orange
+        image: hilltopconsultancy/globe:v1
         ports:
         - containerPort: 8080
         env:
@@ -1431,7 +1431,7 @@ spec:
     spec:
       containers:
       - name: colorapp
-        image: hilltopconsultancy/colorapp:orange
+        image: hilltopconsultancy/globe:v1
         ports:
         - containerPort: 8080
         envFrom:
