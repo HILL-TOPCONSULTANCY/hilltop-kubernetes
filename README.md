@@ -600,225 +600,132 @@ k get pods
 ```
 # 4.  *STATEFULSETS:*
 
-A **StatefulSet** is a Kubernetes controller that manages **stateful applications**. Unlike a **ReplicaSet**, which creates identical Pods, a StatefulSet ensures that each Pod has:
-1. A **stable, unique identity** (e.g., `pod-0`, `pod-1`, `pod-2`).
-2. A **persistent storage volume** that remains even after a Pod is deleted.
-3. A **controlled deployment and scaling process** (Pods are started and terminated in order).
+###  **Definition:**
 
-## When to Use a StatefulSet?
-- Databases (e.g., **MySQL, PostgreSQL, MongoDB, Cassandra**) that require persistent storage.  
-- Distributed applications that need **stable network identities** (e.g., **Kafka, Zookeeper, Elasticsearch**).  
-- Applications that require **ordered scaling & rolling updates**.
+A **StatefulSet** manages the deployment and scaling of a set of pods that require:
+
+* **Stable network identity** (e.g., `pod-0`, `pod-1`)
+* **Persistent storage**
+* **Ordered** startup and shutdown
+
+Unlike Deployments, each pod in a StatefulSet gets its **own volume** and **keeps its name and data**, even if rescheduled.
 
 ---
 
-## Example 1: Basic StatefulSet for Nginx
-This example deploys an **Nginx StatefulSet** where each Pod has a stable hostname and persistent storage.
+###  **Use Case:**
 
- `statefulset.yaml`
+Used for **stateful applications** that need:
+
+* Unique identities and storage per pod
+* Stable hostnames
+* Persistent volumes that survive restarts
+
+ **Examples:**
+
+* Databases like MySQL, MongoDB, Cassandra
+* Kafka, Zookeeper
+* Applications writing logs or data to disk
+
+---
+
+###  **StatefulSet Example Using `hilltopconsultancy/colorapp:grey`**
+
 ```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: colorapp
+spec:
+  clusterIP: None
+  selector:
+    app: colorapp
+  ports:
+    - port: 80
+      name: http
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: nginx-statefulset
+  name: colorapp
 spec:
-  serviceName: "nginx"
-  replicas: 3
+  serviceName: "colorapp"
+  replicas: 2
   selector:
     matchLabels:
-      app: nginx
+      app: colorapp
   template:
     metadata:
       labels:
-        app: nginx
+        app: colorapp
     spec:
       containers:
-        - name: nginx
-          image: nginx:latest
+        - name: colorapp
+          image: hilltopconsultancy/colorapp:grey
           ports:
             - containerPort: 80
           volumeMounts:
-            - name: nginx-storage
-              mountPath: /usr/share/nginx/html  # Persistent storage mount
+            - name: data
+              mountPath: /data
   volumeClaimTemplates:
     - metadata:
-        name: nginx-storage
+        name: data
       spec:
         accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
         resources:
           requests:
-            storage: 1Gi  # Persistent storage size
-```
-
-### What Happens?
-- **Pods get stable names:** `nginx-0`, `nginx-1`, `nginx-2`.
-- **Each Pod gets a persistent volume** (`nginx-storage`).
-- **Scaling happens in order:** `nginx-0` starts first, then `nginx-1`, etc.
-- **If a Pod crashes, it is replaced with the same identity**.
-
----
-
-## Example 2: StatefulSet for MySQL Database
-This StatefulSet **deploys a MySQL database** with persistent storage.
- `statefulset.yaml`
-```yaml
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: mysql-statefulset
-spec:
-  serviceName: "mysql"
-  replicas: 3 
-  selector:
-    matchLabels:
-      app: mysql
-  template:
-    metadata:
-      labels:
-        app: mysql
-    spec:
-      containers:
-        - name: mysql
-          image: mysql:5.7
-          env:
-            - name: MYSQL_ROOT_PASSWORD
-              value: "mypassword"
-          ports:
-            - containerPort: 3306
-          volumeMounts:
-            - name: mysql-storage
-              mountPath: /var/lib/mysql
-  volumeClaimTemplates:
-    - metadata:
-        name: mysql-storage
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 5Gi  # Persistent storage for MySQL
-```
-
-### What Happens?
-- **Pods get stable identities:** `mysql-0`, `mysql-1`, `mysql-2`.
-- **Each MySQL Pod gets a unique storage volume** (so data is not lost if a Pod is deleted).
-- **Pods restart in sequence:** If `mysql-0` is down, Kubernetes restores it first before moving to `mysql-1`.
----
-
-## ** How to Deploy a StatefulSet**
-1 **Apply the StatefulSet**  
-```bash
-kubectl apply -f statefulset.yaml
-```
-
-2 **Check the StatefulSet**  
-```bash
-kubectl get statefulsets
-```
-
-3 **Check the Pods**  
-```bash
-kubectl get pods -l app=nginx
-```
-
-4 **Check Persistent Volumes**  
-```bash
-kubectl get pvc
+            storage: 5Gi
 ```
 
 ---
 
-## Key Differences: StatefulSet vs. ReplicaSet
-| Feature        | StatefulSet | ReplicaSet |
-|---------------|------------|------------|
-| Pod Identity  | Unique, stable names (e.g., `pod-0`, `pod-1`) | Randomly assigned names |
-| Scaling       | Ordered (first `pod-0`, then `pod-1`) | All Pods created/deleted at once |
-| Storage       | Persistent storage for each Pod | Shared storage, ephemeral |
-| Use Case      | Databases, distributed systems | Stateless applications, web services |
+##  **2. DaemonSet**
+
+###  **Definition:**
+
+A **DaemonSet** ensures that a pod runs on **every node** (or a selected group of nodes) in the cluster. It's used for **node-level services** like monitoring agents or log shippers.
+
+Every time a new node joins the cluster, the DaemonSet automatically adds the pod to it.
 
 ---
-## When to Use a StatefulSet?
-**Use StatefulSet when your application needs stable identities and persistent storage** (e.g., databases, message queues, distributed systems).  
-**Use ReplicaSet/Deployment for stateless apps** where Pod identity doesn’t matter.
 
+###  **Use Case:**
 
-# 5. *DEAMONSETS:*
+Used for **background services** that must run on all nodes, such as:
 
-+ Deamonsets are like replicasets which help you run one instance of pods, but it runs one copy of your pod on every node on the cluster.
-+ The deamonset ensures that one copy of the pod is always running on every node in the cluster.
-+ A use case is if you are deploying a log collecting or monitoring agent.
-+ objects like the kube-proxy and network use deamonsets because they have to run on every node.
+* Monitoring (e.g., Prometheus Node Exporter)
+* Log collection (e.g., Fluentd, Filebeat)
+* Security tools (e.g., Falco)
+* CSI storage drivers (e.g., AWS EBS CSI)
 
-`deamonset.yaml`
+---
+
+###  **DaemonSet Example Using Prometheus Node Exporter**
+
 ```yaml
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: fluentd-elasticsearch
-  namespace: kube-system
+  name: node-exporter
   labels:
-    k8s-app: fluentd-logging
+    app: node-exporter
 spec:
   selector:
     matchLabels:
-      name: fluentd-elasticsearch
+      app: node-exporter
   template:
     metadata:
       labels:
-        name: fluentd-elasticsearch
+        app: node-exporter
     spec:
-      tolerations:
-      # These tolerations are to have the daemonset runnable on control plane nodes
-      # remove them if your control plane nodes should not run pods
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
-        effect: NoSchedule
-      - key: node-role.kubernetes.io/master
-        operator: Exists
-        effect: NoSchedule
       containers:
-      - name: fluentd-elasticsearch
-        image: quay.io/fluentd_elasticsearch/fluentd:v2.5.2
-        resources:
-          limits:
-            memory: 200Mi
-          requests:
-            cpu: 100m
-            memory: 200Mi
-        volumeMounts:
-        - name: varlog
-          mountPath: /var/log
-      #it may be desirable to set a high priority class to ensure that a DaemonSet Pod
-      #preempts running Pods
-      #priorityClassName: important
-      terminationGracePeriodSeconds: 30
-      volumes:
-      - name: varlog
-        hostPath:
-          path: /var/log
+        - name: node-exporter
+          image: prom/node-exporter
+          ports:
+            - containerPort: 9100
+              name: metrics
 ```
-```sh
-k create -f <filename>
-kubectl get deamonsets 
-kubectl describe deamonsets
-kubectl get daemonsets --all-namespaces 
-```
-- How do you get pods to be scheduled on every node?
-- one approach is to use the node name to bypass the scheduler and place a pod on a desired node.
-  
-
-# Labels and Selectors:
-+ Labels are used as filters for ReplicaSet. Labels allow the rs to know what pod in the cluster or nodes 
-placed under its management since there could be multiple pods running in the cluster.
-+ The template definition section is required in every rs, even for pods that were created before the rs 
-+ This is because if the pod fails and is to be recreated, it will need the spec to recreate it
-
-- if you want to scale from 3 to 6 replicas, update the replicas to 6 and run
-```sh
- kubectl replace -f <filename>
- kubectl scale --replicas=6 <filename>
- kubectl scale -- replicas replicaset name 
- kubectl edit pod/rs/rc/deploy <podname>
-```
+---
 
 # SERVICE DISCOVERY
 https://kubernetes.io/docs/concepts/services-networking/service/
