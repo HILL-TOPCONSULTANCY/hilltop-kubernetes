@@ -1278,9 +1278,10 @@ A ConfigMap is an API object used to store non-confidential data in key-value pa
 ### 1. From Literal Values
 ```bash
 kubectl create configmap app-config \
-  --from-literal=COLOR=red \
-  --from-literal=ENVIRONMENT=production \
-  --from-literal=LOG_LEVEL=debug
+  --from-literal=COLOR=green \
+  --from-literal=COUNTRY=Cameroon \
+  --from-literal=LOG_LEVEL=debug \
+  --from-literal=CALENDAR=false
 ```
 
 ### 2. From YAML File
@@ -1292,9 +1293,9 @@ metadata:
   name: app-config
 data:
   COLOR: red
-  ENVIRONMENT: production
+  CALENDER: true
   LOG_LEVEL: debug
-  UI_PROPERTIES_FILE_NAME: ui.properties
+  COUNTRY: Cameroon
 ```
 
 Apply the ConfigMap:
@@ -1323,7 +1324,7 @@ spec:
     spec:
       containers:
       - name: colorapp
-        image: hilltopconsultancy/colorapp:orange
+        image: hilltopconsultancy/globe:v1
         ports:
         - containerPort: 8080
         envFrom:
