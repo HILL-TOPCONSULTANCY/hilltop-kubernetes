@@ -599,82 +599,264 @@ kubectl get hpa myapp-rc --watch
 k get pods 
 ```
 # 4.  *STATEFULSETS:*
+# Deploying a StatefulSet on AWS EKS with EBS CSI Driver and IRSA
 
-###  **Definition:**
+This guide walks you through the deployment of a Kubernetes `StatefulSet` on AWS EKS. It uses:
 
-A **StatefulSet** manages the deployment and scaling of a set of pods that require:
-
-* **Stable network identity** (e.g., `pod-0`, `pod-1`)
-* **Persistent storage**
-* **Ordered** startup and shutdown
-
-Unlike Deployments, each pod in a StatefulSet gets its **own volume** and **keeps its name and data**, even if rescheduled.
+- AWS EBS volumes provisioned dynamically via the EBS CSI Driver
+- Kubernetes-native persistent volume claims (PVC)
+- An optional IRSA setup using IAM Roles for Service Accounts (STS) — though no AWS services are accessed directly
+- A custom Docker image: `hilltopconsultancy/globe:v1`
 
 ---
 
-###  **Use Case:**
+## What Is a StatefulSet?
 
-Used for **stateful applications** that need:
+A `StatefulSet` manages stateful applications in Kubernetes. Unlike `Deployments`, it provides:
 
-* Unique identities and storage per pod
-* Stable hostnames
-* Persistent volumes that survive restarts
+- **Stable network identity** (e.g., `pod-0`, `pod-1`)
+- **Stable storage** (each pod gets its own volume)
+- **Ordered deployment and scaling**
 
- **Examples:**
-
-* Databases like MySQL, MongoDB, Cassandra
-* Kafka, Zookeeper
-* Applications writing logs or data to disk
+Use cases:
+- Databases (PostgreSQL, MongoDB)
+- Caches (Redis, Memcached)
+- Applications needing persistent local data
 
 ---
 
-###  **StatefulSet Example Using `hilltopconsultancy/colorapp:grey`**
+##  Prerequisites
+
+- EKS cluster (`eks-orange-prod`) running in region `eu-central-1`
+- `kubectl` and `eksctl` installed and configured
+- Node group with EC2 instances in subnets tagged for ELB and CSI
+- The following environment variables:
+
+```bash
+export CLUSTER_NAME=eks-orange-prod
+export REGION=eu-central-1
+export ACCOUNT_ID=<your-aws-account-id>
+````
+
+---
+
+## Step 1: Associate OIDC Provider with the EKS Cluster
+
+```bash
+eksctl utils associate-iam-oidc-provider \
+  --cluster $CLUSTER_NAME \
+  --region $REGION \
+  --approve
+```
+
+Verify:
+
+```bash
+aws eks describe-cluster \
+  --name $CLUSTER_NAME \
+  --region $REGION \
+  --query "cluster.identity.oidc.issuer" \
+  --output text
+```
+
+Save the ID at the end of the URL for later (e.g., `OIDC_ID=xxxxx`).
+
+---
+
+## Step 2: Set Up the EBS CSI Driver Role (IRSA)
+
+### 2.1 Download the IAM policy for EBS CSI
+
+```bash
+curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-ebs-csi-driver/master/docs/example-iam-policy.json
+```
+
+### 2.2 Create IAM policy
+
+```bash
+aws iam create-policy \
+  --policy-name AmazonEBSCSIDriverPolicy \
+  --policy-document file://example-iam-policy.json
+```
+
+### 2.3 Create IAM role for CSI driver
+
+Replace `<OIDC_ID>` below with your actual OIDC ID:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>:sub": "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+        }
+      }
+    }
+  ]
+}
+```
+
+Save as `ebs-trust-policy.json`, then run:
+
+```bash
+aws iam create-role \
+  --role-name AmazonEBSCSIDriverRole \
+  --assume-role-policy-document file://ebs-trust-policy.json
+
+aws iam attach-role-policy \
+  --role-name AmazonEBSCSIDriverRole \
+  --policy-arn arn:aws:iam::$ACCOUNT_ID:policy/AmazonEBSCSIDriverPolicy
+```
+
+### 2.4 Annotate the service account for the CSI driver
+
+```bash
+kubectl annotate serviceaccount ebs-csi-controller-sa \
+  -n kube-system \
+  eks.amazonaws.com/role-arn=arn:aws:iam::$ACCOUNT_ID:role/AmazonEBSCSIDriverRole
+```
+
+---
+
+## Step 3: Create a Kubernetes ServiceAccount
+
+We create a simple ServiceAccount for your StatefulSet (no AWS permissions required):
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-app-sa
+  namespace: default
+```
+
+Save as `serviceaccount.yaml` and apply:
+
+```bash
+kubectl apply -f serviceaccount.yaml
+```
+
+---
+
+## Step 4: Create the gp3 StorageClass
+
+Create a new `gp3` storage class for EBS:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  fsType: ext4
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+```
+
+Save as `gp3-storageclass.yaml` and apply:
+
+```bash
+kubectl apply -f gp3-storageclass.yaml
+```
+
+---
+
+## Step 5: Create a Headless Service for StatefulSet
 
 ```yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: colorapp
+  name: globe
 spec:
   clusterIP: None
   selector:
-    app: colorapp
+    app: globe
   ports:
     - port: 80
-      name: http
+```
+
+Save as `headless-svc.yaml` and apply:
+
+```bash
+kubectl apply -f headless-svc.yaml
+```
+
 ---
+
+##  Step 6: Deploy the StatefulSet
+
+```yaml
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: colorapp
+  name: web
 spec:
-  serviceName: "colorapp"
-  replicas: 2
+  serviceName: "globe"
+  replicas: 1
   selector:
     matchLabels:
-      app: colorapp
+      app: globe
   template:
     metadata:
       labels:
-        app: colorapp
+        app: globe
     spec:
+      serviceAccountName: my-app-sa
       containers:
-        - name: colorapp
+        - name: globe
           image: hilltopconsultancy/globe:v1
           ports:
             - containerPort: 80
           volumeMounts:
-            - name: data
-              mountPath: /data
+            - name: www
+              mountPath: /usr/share/nginx/html
   volumeClaimTemplates:
     - metadata:
-        name: data
+        name: www
       spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: gp3
         resources:
           requests:
-            storage: 5Gi
+            storage: 1Gi
+```
+
+Save as `statefulset.yaml` and apply:
+
+```bash
+kubectl apply -f statefulset.yaml
+```
+
+---
+
+##  Step 7: Verify Deployment
+
+Check status:
+
+```bash
+kubectl get pods
+kubectl get pvc
+kubectl describe pod web-0
+```
+
+Expected:
+
+* Pod `web-0` is running
+* PVC `www-web-0` is `Bound`
+* EBS volume created and attached automatically
+
+---
+
 ```
 
 ---
