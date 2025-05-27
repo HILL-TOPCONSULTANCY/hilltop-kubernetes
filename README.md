@@ -1740,97 +1740,139 @@ spec:
 ```
 ### 4. *SECRETS:*
 
-Secrets just like configmaps are used to store configuration data which can be injected into an object in k8s.
-Unlike configmaps, secrets store sensitive data such as passwords and keys in an encoded manner.
-You can create a secret imperatively by using:
-```sh
-  kubectl create secret generic <secretName> app-secret --from-literal=DB_Host=mysql   \
-                                                        --from-literal=DB_User=root
+Kubernetes `Secrets` let you store **sensitive information** such as:
+
+- Database passwords
+- API tokens
+- SSH keys
+
+Unlike ConfigMaps, Secrets are **base64-encoded** and intended to keep sensitive data separate from your application code.
+
+---
+
+##  Use Cases
+
+You should use Secrets when:
+- You want to **inject credentials** or API keys into your containers.
+- You don’t want to hardcode sensitive values into container images or YAML manifests.
+- You want better control over **secret management and auditing**.
+
+---
+##  How to Create a Secret
+
+###  Option A: Imperatively from CLI
+
+```bash
+kubectl create secret generic app-secret \
+  --from-literal=DB_HOST=mysql \
+  --from-literal=DB_USER=root \
+  --from-literal=DB_PASSWORD=secret123
+````
+
+###  Option B: Declaratively from a YAML file
+
+First, encode values with `base64`:
+
+```bash
+echo -n 'mysql' | base64        # Output: bXlzcWw=
+echo -n 'root' | base64         # Output: cm9vdA==
+echo -n 'secret123' | base64    # Output: c2VjcmV0MTIz
 ```
-    You can ref the secret from a file using the --from-file=app-secret
-    For a declarative approach
-```sh
+
+Then create `secret.yaml`:
+
+```yaml
 apiVersion: v1
 kind: Secret
 metadata:
   name: app-secret
+type: Opaque
 data:
-  DB_Host: mysql
-  DB_User: root 
-  DB_Password: password
+  DB_HOST: bXlzcWw=
+  DB_USER: cm9vdA==
+  DB_PASSWORD: c2VjcmV0MTIz
 ```
-It is however not advisable to pass your secrets in plain text as if defeats the entire purpose.
-To convert the data from plaintext to an encoded format, on a Linux system, use the  
-```sh 
-echo -n 'mysql' | base64
-echo -n 'root' | base64
-echo -n 'password' | base64
+
+Apply it:
+
+```bash
+kubectl apply -f secret.yaml
 ```
-```sh
-apiVersion: v1
-kind: Secret
-metadata:
-  name: app-secret
-data:
-  DB_Host: sjhdvdv=
-  DB_User: fnvjsf== 
-  DB_Password: sffvnhri
+
+---
+
+## 🔍 How to View Secrets
+
+```bash
+kubectl get secret app-secret
+kubectl describe secret app-secret
+kubectl get secret app-secret -o yaml
 ```
-copy the corresponding encoded values and replace and inject them into the file.
-```sh
-kubectl get secrets app-secret
-kubectl describe secrets
-kubectl get secrets app-secret -o yaml
+
+To decode values:
+
+```bash
+echo -n 'c2VjcmV0MTIz' | base64 --decode
 ```
-+ to decode encoded values use the  
-```sh
-echo -n 'djvfjdo=' | base64 --decode
-```
-+ To inject encoded values into the pod object, use the 
-```sh
+
+---
+
+## Deploy a Test Application that Reads Secrets
+
+We’ll deploy a simple app that prints secret values to logs on startup.
+
+###  `pod-with-secret.yaml`
+
+```yaml
 apiVersion: v1
 kind: Pod
 metadata:
-  name: nginx
+  name: secret-demo
 spec:
+  serviceAccountName: default
   containers:
-  - image: nginx
-    name: nginx
-    ports:
-      - containerPort: 8080
-    envFrom:
-      - secretRef:
-        name: app-secret
+    - name: demo
+      image: busybox
+      command: [ "/bin/sh", "-c" ]
+      args:
+        - echo "Connecting to DB with $DB_USER@$DB_HOST"; echo "Password: $DB_PASSWORD"; sleep 3600
+      envFrom:
+        - secretRef:
+            name: app-secret
 ```
-+ Secrets are not encrypted but rather encoded and can be decoded using the same method. 
-+ Therefore, do not upload your secret files to the GitHub repo.
 
-You can enable encryption at rest:
-```sh
-kubectl get secrets --all-namespaces -o jason | kubectl replace -f -
+Deploy it:
+
+```bash
+kubectl apply -f pod-with-secret.yaml
 ```
-https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/
 
-## i. *PersistentVolume (PV)*
+---
 
-+ A PersistentVolume (PV) is a piece of storage in the cluster that has been provisioned by an administrator
-+ PVs are volume plugins like Volumes, but have a lifecycle independent of any individual Pod that uses the PV
-```yaml
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: task-pv-volume
-  labels:
-    type: local
-spec:
-  storageClassName: manual
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteOnce
-  hostPath:
-    path: "/mnt/data"
+## Test If the Secret Was Injected
+
+Check the pod's logs:
+
+```bash
+kubectl logs secret-demo
 ```
+
+Expected output:
+
+```
+Connecting to DB with root@mysql
+Password: secret123
+```
+---
+
+## ❗ Security Notes
+
+* Kubernetes Secrets are **not encrypted at rest by default** — they are only base64-encoded.
+* Use Kubernetes encryption providers (e.g., KMS, Vault) to enable encryption at rest.
+* **Do NOT commit Secrets to GitHub.**
+
+---
+
 ## ii. *PersistentVolumeClaim (PVC)*
 + A PersistentVolumeClaim (PVC) is a request for storage by a user. 
 + Pods consume node resources and PVCs consume PV resources.
@@ -1920,83 +1962,210 @@ A **context**
   ```
 
 ### Namespace
-A **namespace** 
-+ is a way to divide cluster resources between multiple users via virtual clusters. Namespaces provide a mechanism for isolating groups of resources within a single cluster.
-+ They are especially useful in larger environments where teams or projects need their own spaces for resources.
 
-**Key points about namespaces:**
-- Namespaces are a way to organize and isolate resources within a cluster.
-- Namespaces do not provide complete isolation; they are intended for logical separation rather than security.
-- Each resource created in Kubernetes belongs to a namespace, except for cluster-wide resources (like nodes and persistent volumes) which are not namespaced.
+# Kubernetes Namespaces: Definition, Use Case, and Cross-Namespace Demo
 
-**Commands to manage namespaces:**
-- List all namespaces:
-  ```sh
-  kubectl get namespaces
-  ```
-- Create a new namespace:
-  ```sh
-  kubectl create namespace <namespace-name>
-  ```
-- Set the default namespace for the current context:
-  ```sh
-  kubectl config set-context --current --namespace=<namespace-name>
-  ```
+---
 
-### Example
-Consider a scenario where you have two contexts defined in your kubeconfig:
-- `dev-context` pointing to the development cluster with namespace `development`.
-- `prod-context` pointing to the production cluster with namespace `production`.
+##  What Are Kubernetes Namespaces?
 
-Switching contexts changes both the cluster and namespace:
-```sh
-kubectl config use-context dev-context
-kubectl config use-context prod-context
-```
+A **namespace** in Kubernetes is a virtual cluster within a physical cluster. Namespaces allow you to organize and manage resources in logically isolated groups.
 
-Setting a namespace within a context only changes the namespace for that context:
-```sh
-kubectl config set-context --current --namespace=staging
-```
+By default, Kubernetes comes with the `default`, `kube-system`, `kube-public`, and `kube-node-lease` namespaces.
 
- [Kubernetes official documentation on using contexts](https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/#context).
+---
 
-To ensure that your resources are always created in a specific namespace, add the namespace block in the resources
-definition file
-```yaml
-apiVersion: v1
-Kind: Service
-metadata: 
-  name: backend
-  namespace: dev  # This resource will always be created in the dev namespace, and will create the ns if it didn't exist
-spec:
-  type: LoadBalancer
-  ports:
-    - targetPort: 80  # (port on Pod). it will assume port if not specified
-      port: 80 # port on service. this is a mandatory field
-  selector:
-    app: myapp # This is the label that was used in the deployment metadata section
-    type: backend
-```
+## Why Use Namespaces?
+
+Namespaces are useful when you want to:
+
+| Use Case                     | Benefit                                                        |
+|-----------------------------|----------------------------------------------------------------|
+| **Environment separation**   | Keep `dev`, `staging`, and `prod` resources logically isolated |
+| **Team isolation**           | Give different teams (`frontend`, `backend`) their own space   |
+| **Security boundaries**      | Apply RBAC rules specific to users per namespace               |
+| **Resource quotas**          | Prevent noisy-neighbor problems by limiting per-namespace usage|
+| **Multi-tenancy**            | Run workloads from different clients or applications securely  |
+
+---
+
+## Demo: Create and Use Two Namespaces (`finance` & `devops`)
+
+We will:
+- Create two namespaces
+- Deploy an app in each namespace
+- Verify isolation
+- Demonstrate **cross-namespace access** using DNS
+
+---
+
+##  Step 1: Create the Namespaces
+
+```bash
+kubectl create namespace finance
+kubectl create namespace devops
+````
+
+---
+
+##  Step 2: Deploy an App in Each Namespace
+
+###  `finance-pod.yaml`
 
 ```yaml
 apiVersion: v1
-Kind: NameSpace
+kind: Pod
 metadata:
-  name: dev
+  name: finance-api
+  namespace: finance
+  labels:
+    app: finance-api
+spec:
+  containers:
+    - name: app
+      image: hashicorp/http-echo
+      args:
+        - "-text=Hello from Finance"
+      ports:
+        - containerPort: 5678
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: finance-service
+  namespace: finance
+spec:
+  selector:
+    app: finance-api
+  ports:
+    - port: 80
+      targetPort: 5678
 ```
-OR 
- kubectl create namespace dev
- kubectl get ns 
 
-to set a namespace as the default namespace so that you don't always have to pass the NameSpace command, you need to set
-set the namespace in the current context
+```bash
+kubectl apply -f finance-pod.yaml
+```
 
-kubectl config set-context $(kubectl config current-context) --namespace=dev
-contexts are used to manage all resources in clusters from a single system 
+---
 
-To view resources in all NameSpaces use the 
-kubectl get pods --all-namespaces
+###  `devops-pod.yaml`
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: devops-api
+  namespace: devops
+  labels:
+    app: devops-api
+spec:
+  containers:
+    - name: app
+      image: hashicorp/http-echo
+      args:
+        - "-text=Hello from DevOps"
+      ports:
+        - containerPort: 5678
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-service
+  namespace: devops
+spec:
+  selector:
+    app: devops-api
+  ports:
+    - port: 80
+      targetPort: 5678
+```
+
+```bash
+kubectl apply -f devops-pod.yaml
+```
+
+---
+
+## Step 3: Verify Isolation
+
+```bash
+kubectl get pods -n finance
+kubectl get pods -n devops
+```
+
+Try to reference a `Secret`, `Pod`, or `Service` from another namespace — it will **not work unless fully qualified**.
+
+---
+
+##  Step 4: Access a Service Across Namespaces (Using DNS)
+
+### Exec into the devops pod:
+
+```bash
+kubectl exec -it devops-api -n devops -- sh
+```
+
+### Inside the container:
+
+```sh
+wget -qO- http://finance-service.finance.svc.cluster.local
+```
+
+ You’ll get: `Hello from Finance`
+
+---
+
+## Step 5: Attempt Invalid Cross-Namespace Access
+
+Try accessing a ConfigMap or Secret from `finance` inside `devops`:
+
+```bash
+kubectl get secrets -n finance
+kubectl get secrets -n devops
+```
+
+You’ll notice:
+
+* Secrets/ConfigMaps are **namespace-scoped**
+* They must be duplicated across namespaces if needed
+
+---
+
+##  DNS Format for Cross-Namespace Services
+
+```
+http://<service-name>.<namespace>.svc.cluster.local
+```
+
+---
+
+##  Best Practices and Logical Uses
+
+| Namespace Design Pattern | Description                                       |
+| ------------------------ | ------------------------------------------------- |
+| `team-env`               | e.g., `frontend-dev`, `backend-prod`              |
+| `client-name`            | e.g., `tenant-a`, `tenant-b` for multi-tenancy    |
+| `feature-branch`         | e.g., `feature-login-refactor` for temporary test |
+
+### Recommendations:
+
+* Use namespaces in **RBAC** to scope permissions.
+* Use **ResourceQuotas** to cap CPU/memory usage per team.
+* Avoid clutter: don’t use namespaces as folders for every small app — use them meaningfully.
+
+---
+
+##  Summary
+
+Namespaces are critical for:
+
+* Organizing workloads
+* Providing logical separation
+* Securing workloads with RBAC
+* Supporting complex workflows and multi-user environments
+
+---
+
 
 ### Resource Quota:
 To set a limit for resources in a namespace, create a resource-quota object in
