@@ -857,10 +857,6 @@ Expected:
 
 ---
 
-```
-
----
-
 ##  **2. DaemonSet**
 
 ###  **Definition:**
