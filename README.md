@@ -1085,8 +1085,8 @@ aws iam create-policy \
 Associate the IAM OIDC provider for your cluster:
 ```bash
 eksctl utils associate-iam-oidc-provider \
-  --region eu-central-1 \
-  --cluster eks-hilltop-prod \
+  --region <Region> \
+  --cluster <ClusterName>\
   --approve
 ```
 
@@ -1094,8 +1094,8 @@ eksctl utils associate-iam-oidc-provider \
 Create an IAM service account for the controller:
 ```bash
 eksctl create iamserviceaccount \
-  --region eu-central-1 \
-  --cluster eks-hilltop-prod \
+  --region <Region> \
+  --cluster <ClusterName> \
   --namespace kube-system \
   --name aws-load-balancer-controller \
   --role-name AmazonEKSLoadBalancerController \
@@ -1115,10 +1115,10 @@ Install the controller using Helm:
 ```bash
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
-  --set clusterName=eks-hilltop-prod \
+  --set clusterName=<ClusterName> \
   --set serviceAccount.create=false \
   --set serviceAccount.name=aws-load-balancer-controller \
-  --set region=eu-central-1 \
+  --set region=<Region> \
   --set vpcId=vpc-05bd534e99630eca3 \
   --version 1.13.0
 ```
