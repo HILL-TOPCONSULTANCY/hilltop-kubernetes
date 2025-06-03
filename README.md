@@ -1986,7 +1986,6 @@ spec:
 
 ---
 
-```
 ## Volume Lifecycle:
 The reclaim policy for a PersistentVolume tells the cluster what to do with the volume after it has been released of its claim
 + Recycle
