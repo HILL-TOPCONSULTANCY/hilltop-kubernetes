@@ -1995,19 +1995,32 @@ The reclaim policy for a PersistentVolume tells the cluster what to do with the 
 
 ### NAMESPACES:
 
-  A namespace is simply a distinct working area in k8s where a defined set of resources rules and users can  
-  be assigned to a namespace. 
-- By default, a k8s cluster comes with a default namespace. Here, a user can provision resources.
-- the subsystem namespace is also created by default for a set of pods and services for its functioning.
-- The kubepublic is also created to host resources that are made available to the public.
-- Within a cluster, you can create different namespaces for different projects and allocate resources to that namespace.
-- Resources from the same namespaces can refer to each other by their names,
-- they can also communicate with resources from another namespace by their names and append their namespace.
-eg msql.connect("db-service.dev.svc.cluster.local")
-```sh
-kubectl get pods > will list only pods in the default namespace
-kubectl get pods --namespace=kubesystem
 
+# Kubernetes Namespaces: Definition, Use Case, and Cross-Namespace Demo
+
+---
+
+##  What Are Kubernetes Namespaces?
+
+A **namespace** in Kubernetes is a virtual cluster within a physical cluster. Namespaces allow you to organize and manage resources in logically isolated groups.
+
+By default, Kubernetes comes with the `default`, `kube-system`, `kube-public`, and `kube-node-lease` namespaces.
+
+---
+
+## Why Use Namespaces?
+
+Namespaces are useful when you want to:
+
+| Use Case                     | Benefit                                                        |
+|-----------------------------|----------------------------------------------------------------|
+| **Environment separation**   | Keep `dev`, `staging`, and `prod` resources logically isolated |
+| **Team isolation**           | Give different teams (`frontend`, `backend`) their own space   |
+| **Security boundaries**      | Apply RBAC rules specific to users per namespace               |
+| **Resource quotas**          | Prevent noisy-neighbor problems by limiting per-namespace usage|
+| **Multi-tenancy**            | Run workloads from different clients or applications securely  |
+
+---
 kubectl apply -f <filename>  ==> will create object in the default namespace
 kubectl create -f <filename> --namespace=kubesystem  ==> will create object in the kubesystem namespace
 ```
@@ -2036,35 +2049,6 @@ A **context**
   ```sh
   kubectl config use-context <context-name>
   ```
-
-### Namespace
-
-# Kubernetes Namespaces: Definition, Use Case, and Cross-Namespace Demo
-
----
-
-##  What Are Kubernetes Namespaces?
-
-A **namespace** in Kubernetes is a virtual cluster within a physical cluster. Namespaces allow you to organize and manage resources in logically isolated groups.
-
-By default, Kubernetes comes with the `default`, `kube-system`, `kube-public`, and `kube-node-lease` namespaces.
-
----
-
-## Why Use Namespaces?
-
-Namespaces are useful when you want to:
-
-| Use Case                     | Benefit                                                        |
-|-----------------------------|----------------------------------------------------------------|
-| **Environment separation**   | Keep `dev`, `staging`, and `prod` resources logically isolated |
-| **Team isolation**           | Give different teams (`frontend`, `backend`) their own space   |
-| **Security boundaries**      | Apply RBAC rules specific to users per namespace               |
-| **Resource quotas**          | Prevent noisy-neighbor problems by limiting per-namespace usage|
-| **Multi-tenancy**            | Run workloads from different clients or applications securely  |
-
----
-
 ## Demo: Create and Use Two Namespaces (`finance` & `devops`)
 
 We will:
@@ -2081,7 +2065,6 @@ We will:
 kubectl create namespace finance
 kubectl create namespace devops
 ````
-
 ---
 
 ##  Step 2: Deploy an App in Each Namespace
