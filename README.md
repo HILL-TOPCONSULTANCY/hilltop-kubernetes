@@ -1801,7 +1801,7 @@ kubectl apply -f secret.yaml
 
 ---
 
-## 🔍 How to View Secrets
+##  How to View Secrets
 
 ```bash
 kubectl get secret app-secret
@@ -1873,42 +1873,119 @@ Password: secret123
 
 ---
 
-## ii. *PersistentVolumeClaim (PVC)*
-+ A PersistentVolumeClaim (PVC) is a request for storage by a user. 
-+ Pods consume node resources and PVCs consume PV resources.
-+ While Pods can request specific levels of resources (CPU and Memory), Claims can request specific size and access modes (e.g., they can be mounted ReadWriteOnce, ReadOnlyMany, ReadWriteMany, or ReadWriteOncePod,)
+## Persistent Volume (PV) and Persistent Volume Claim (PVC)
+
+### 1. Persistent Volume (PV)
+
+**Definition**:
+A `PersistentVolume` is a piece of storage in the cluster provisioned by an admin or dynamically created by Kubernetes using a storage class (e.g., AWS EBS). It is a cluster resource.
+
+**Use Case**:
+Used when you want to manage storage independently from pods, allowing data persistence across pod restarts or rescheduling.
+
+**Note**:
+When using dynamic provisioning (like with EBS `gp3`), you don't need to create a PV manually — Kubernetes creates it automatically when you create a PVC.
+
+---
+
+### 2. Persistent Volume Claim (PVC)
+
+**Definition**:
+A `PersistentVolumeClaim` is a request for storage by a user. It specifies size, access mode, and storage class.
+
+**Use Case**:
+Used by pods to request storage without knowing the details of the underlying volume. It acts like an "interface" to access the PV.
+
+---
+
+### 3. Access Modes
+
+**Definition**:
+Access modes define how a volume can be mounted by pods.
+
+| Access Mode   | Description                            | Supported by AWS EBS |
+| ------------- | -------------------------------------- | -------------------- |
+| ReadWriteOnce | Mounted as read-write by a single node | Yes                  |
+| ReadOnlyMany  | Mounted as read-only by many nodes     | No                   |
+| ReadWriteMany | Mounted as read-write by many nodes    | No                   |
+
+**Explanation**:
+AWS EBS only supports **ReadWriteOnce**, which means:
+
+* Only one node can mount the volume at a time.
+* You can scale pods across replicas only if each pod mounts a different volume.
+
+---
+
+### 4. Example: PVC and Deployment Using AWS EBS (`gp3`)
+
+#### Step 1: Create a PVC
+
 ```yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: task-pv-claim
+  name: ebs-pvc
 spec:
-  storageClassName: manual
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 3Gi
+      storage: 5Gi
+  storageClassName: gp3
 ```
+
+This tells Kubernetes to dynamically create a 5Gi EBS volume using the `gp3` storage class and bind it to this claim.
+
+---
+
+#### Step 2: Create a Deployment that Mounts the PVC
+
 ```yaml
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: task-pv-pod
+  name: nginx-ebs-deployment
 spec:
-  volumes:
-    - name: task-pv-storage
-      persistentVolumeClaim:
-        claimName: task-pv-claim
-  containers:
-    - name: task-pv-container
-      image: nginx
-      ports:
-        - containerPort: 80
-          name: "http-server"
-      volumeMounts:
-        - mountPath: "/usr/share/nginx/html"
-          name: task-pv-storage
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-ebs
+  template:
+    metadata:
+      labels:
+        app: nginx-ebs
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        volumeMounts:
+        - name: ebs-storage
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: ebs-storage
+        persistentVolumeClaim:
+          claimName: ebs-pvc
+```
+
+**Explanation**:
+
+* The deployment runs an `nginx` container.
+* The container mounts the EBS volume at `/usr/share/nginx/html`.
+* If the pod is deleted and recreated, the data in the volume remains.
+
+---
+
+### 5. Summary
+
+* Use **PVCs** to request storage in a standardized way.
+* Kubernetes automatically provisions an **EBS volume** via dynamic provisioning using `gp3`.
+* **Access modes** define how the volume can be shared.
+* AWS EBS supports only **ReadWriteOnce** — one node at a time can access the volume in read/write mode.
+* This approach is ideal for **stateful applications** like databases and CMSs.
+
+---
+
 ```
 ## Volume Lifecycle:
 The reclaim policy for a PersistentVolume tells the cluster what to do with the volume after it has been released of its claim
@@ -2244,6 +2321,87 @@ spec:
      name: nginx
   nodeName: controlplane
 ```
+---
+
+## Node Affinity in Kubernetes (EKS)
+
+**Node Affinity** lets you control **which nodes your pod can be scheduled on**, based on node labels. It’s preferred over `nodeSelector` because it's more flexible and expressive.
+
+###  Types of Node Affinity
+
+1. **requiredDuringSchedulingIgnoredDuringExecution**
+
+   * **Hard rule**: Pod *must* be scheduled on a node that matches.
+2. **preferredDuringSchedulingIgnoredDuringExecution**
+
+   * **Soft rule**: Scheduler will try to match, but can ignore it if no suitable node exists.
+
+---
+
+### Example: Schedule pod on nodes in `us-east-1a`
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: topology.kubernetes.io/zone
+            operator: In
+            values:
+            - us-east-1a
+```
+
+☑ In EKS, nodes are **automatically labeled** with their zone using:
+
+```bash
+topology.kubernetes.io/zone=<az>
+```
+
+---
+
+##  Node Anti-Affinity
+
+**Node Anti-Affinity** prevents pods from being scheduled on the **same node** with other pods matching specific labels.
+
+---
+
+###  Example: Avoid placing pod on a node with pods labeled `app=nginx`
+
+```yaml
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - nginx
+      topologyKey: "kubernetes.io/hostname"
+```
+
+ `topologyKey: kubernetes.io/hostname` ensures the pod avoids the **same node**.
+You can also use `topology.kubernetes.io/zone` to spread pods across **AZs**.
+
+---
+
+##  Summary
+
+| Type               | Purpose                           | Key Fields                                    |
+| ------------------ | --------------------------------- | --------------------------------------------- |
+| Node Affinity      | Schedule pods on specific nodes   | `nodeAffinity` → `required` or `preferred`    |
+| Node Anti-Affinity | Avoid certain pods sharing a node | `podAntiAffinity` → `required` or `preferred` |
+
+
 ## RESOURCE REQUIREMENTS:
 
 - every pod requires a set of resources to run.
