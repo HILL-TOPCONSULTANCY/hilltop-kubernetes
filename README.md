@@ -2226,22 +2226,91 @@ Namespaces are critical for:
 
 
 ### Resource Quota:
-To set a limit for resources in a namespace, create a resource-quota object in
+
+A `ResourceQuota` is used to **limit resource consumption** per namespace. It helps control how many resources (pods, CPU, memory, etc.) a team or project can use in a shared cluster.
+
+###  **Common ResourceQuota Types**
+
+#### 1. **Limit by Pod Count Only**
+
+Limits how many pods can be created in the namespace.
+
 ```yaml
 apiVersion: v1
-Kind: ResourceQuota
+kind: ResourceQuota
 metadata:
-  name: compute-quota
+  name: pod-limit
   namespace: dev
 spec:
   hard:
     pods: "10"
-    requests.cpu: "4"
-    requests.memory: 5Gi
-    limits.cpu: "10"
-    limits.memory: 10Gi
 ```
-kubectl apply -f <filename>
+
+---
+
+####  2. **Limit by Memory and CPU Requests Only**
+
+Controls guaranteed minimum resource usage.
+
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-requests
+  namespace: dev
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 4Gi
+```
+
+---
+
+####  3. **Limit by CPU and Memory Limits Only**
+
+Controls the maximum resources pods are allowed to consume.
+
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-limits
+  namespace: dev
+spec:
+  hard:
+    limits.cpu: "4"
+    limits.memory: 6Gi
+```
+
+---
+
+#### 4. **Combined ResourceQuota: Pods + CPU + Memory**
+
+Controls pod count and both requested and maximum resource usage.
+
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: full-quota
+  namespace: dev
+spec:
+  hard:
+    pods: "10"
+    requests.cpu: "2"
+    requests.memory: 3Gi
+    limits.cpu: "4"
+    limits.memory: 5Gi
+```
+
+###  Notes:
+
+* `requests` = guaranteed minimum the pod needs.
+* `limits` = maximum the pod is allowed to use.
+* Applies **per namespace**.
+* Helps avoid resource starvation in multi-team clusters.
+
+---
 
 ### Declarative and Imperative :
   these are different approaches to creating and managing infrastructure in IaC.
@@ -2470,7 +2539,7 @@ spec:
   * Medium eviction priority.
 * **Use Case**: Moderate importance workloads that can share resources.
 
-**⚖️ Example:**
+** Example:**
 
 ```yaml
 apiVersion: v1
