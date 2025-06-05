@@ -2342,7 +2342,7 @@ spec:
             - us-east-1a
 ```
 
-☑ In EKS, nodes are **automatically labeled** with their zone using:
+ In EKS, nodes are **automatically labeled** with their zone using:
 
 ```bash
 topology.kubernetes.io/zone=<az>
@@ -2429,39 +2429,114 @@ ResourceQuota can also be used to set resource limits at the level of the NameSp
 ## QUALITY OF SERVICE IN KUBERNETES:
 
 Kubernetes offers three levels of Quality of Service:
+Here are concise notes and examples on **Kubernetes Quality of Service (QoS)** classes:
 
-+ 1. **BestEffort:**
-   - Pods with BestEffort QoS are not guaranteed any specific amount of resources.
-   - They are scheduled onto nodes based on availability, and they can use whatever resources are available at that time.
-   - These pods are the first to be evicted if resources become scarce.
+---
+###  **Kubernetes QoS Classes Overview**
 
-+ 2. **Burstable:**
-   - Pods with Burstable QoS are guaranteed a minimum amount of CPU and memory.
-   - These pods can burst beyond their guaranteed minimum if the resources are available.
-   - If other pods on the node need resources, Burstable QoS pods might be limited in their burst capacity.
+Kubernetes uses **QoS classes** to manage pod scheduling and resource allocation. QoS is determined based on how you set **CPU/memory resource requests and limits** in the Pod spec.
 
-+ 3. **Guaranteed:**
-   - Pods with Guaranteed QoS are guaranteed a specific amount of CPU and memory.
-   - These pods are not allowed to exceed the resources they have been allocated.
-   - Kubernetes tries to ensure that nodes have enough available resources to meet the guaranteed requirements.
+---
 
-Kubernetes determines the QoS level of pods based on the resource requests and limits specified in the pod's configuration:
+### 1. **BestEffort**
 
-- **Resource Requests:** The minimum amount of resources a pod requires to run. 
-    These requests are used by the scheduler to make placement decisions.
-- **Resource Limits:** The maximum amount of resources a pod is allowed to use.
-    Exceeding these limits could lead to throttling or pod termination.
+* **Description**:
 
-Kubernetes uses the relationship between requests and limits to categorize pods into different QoS classes. 
-The actual QoS class assigned to a pod depends on how its requests and limits are set:
+  * No CPU or memory *requests* or *limits* set.
+  * Lowest priority; first to be evicted under resource pressure.
+* **Use Case**: Non-critical, test, or batch workloads.
+
+**Example:**
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: besteffort-pod
+spec:
+  containers:
+    - name: busybox
+      image: busybox
+      command: ["sleep", "3600"]
+```
+
+---
+
+### 2. **Burstable**
+
+* **Description**:
+
+  * CPU or memory *request* is set, but *limit* is not, or limit > request.
+  * Can burst beyond the requested amount if resources are free.
+  * Medium eviction priority.
+* **Use Case**: Moderate importance workloads that can share resources.
+
+**⚖️ Example:**
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: burstable-pod
+spec:
+  containers:
+    - name: nginx
+      image: nginx
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "250m"
+        limits:
+          memory: "256Mi"
+          cpu: "500m"
+```
+
+---
+
+### 3. **Guaranteed**
+
+* **Description**:
+
+  * *Both* CPU and memory requests **equal** limits.
+  * Highest priority; least likely to be evicted.
+* **Use Case**: Critical or production-grade workloads.
+
+** Example:**
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: guaranteed-pod
+spec:
+  containers:
+    - name: redis
+      image: redis
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "500m"
+        limits:
+          memory: "256Mi"
+          cpu: "500m"
+```
+
+---
+
+### Summary Table
+
+| **QoS Class** | **Requests** | **Limits** | **Eviction Priority** |
+| ------------- | ------------ | ---------- | --------------------- |
+| BestEffort    | Not set      | Not set    | Lowest                |
+| Burstable     | Set          | Optional   | Medium                |
+| Guaranteed    | = Limits     | = Requests | Highest               |
+
+---
 
 - **BestEffort:** Pods with no resource requests or limits.
 - **Burstable:** Pods with resource requests, but without memory limits or with memory limits lower than their requests.
 - **Guaranteed:** Pods with both CPU and memory limits set to be higher than or equal to their resource requests.
 
-Setting appropriate resource requests and limits for pods is crucial for efficient resource allocation and QoS management 
-within a Kubernetes cluster. Properly configured QoS levels help ensure that critical workloads are prioritized 
-and that the cluster operates smoothly without resource contention issues.
 
 ## STATIC PODS:
 
