@@ -2023,7 +2023,6 @@ Namespaces are useful when you want to:
 ---
 kubectl apply -f <filename>  ==> will create object in the default namespace
 kubectl create -f <filename> --namespace=kubesystem  ==> will create object in the kubesystem namespace
-```
 
 ### Context
 A **context** 
