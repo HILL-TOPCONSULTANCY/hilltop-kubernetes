@@ -2682,11 +2682,9 @@ Security in Kubernetes is mainly in the area of
 
 ![4c](https://github.com/CHAFAH/DevOps_Setup/assets/125821852/eee2926b-6e4a-4e4a-ba70-36b6c2cc4fff)
 
-Here's your updated tutorial in **README.md format**, written in clean, professional markdown without icons or emojis. It's ideal for GitHub or internal documentation when teaching **Authentication and Authorization in Kubernetes on AWS EKS**.
 
 ---
 
-````markdown
 # Authentication and Authorization on Amazon EKS
 
 ## Objective
