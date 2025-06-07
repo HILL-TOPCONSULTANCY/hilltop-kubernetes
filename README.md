@@ -2682,241 +2682,187 @@ Security in Kubernetes is mainly in the area of
 
 ![4c](https://github.com/CHAFAH/DevOps_Setup/assets/125821852/eee2926b-6e4a-4e4a-ba70-36b6c2cc4fff)
 
- ## Authentication (Login)
-+ All Kubernetes clusters have two categories of users: service accounts managed by Kubernetes, and normal users.
-+ You can authenticate into the cluster by either
-```sh
-kubectl create ns dev
-kubectl create sa development --ns dev
-kubectl create role dev --ns dev
-kubectl create roleBinding dev --role=dev --serviceAccount=development:dev
+Here's your updated tutorial in **README.md format**, written in clean, professional markdown without icons or emojis. It's ideal for GitHub or internal documentation when teaching **Authentication and Authorization in Kubernetes on AWS EKS**.
+
+---
+
+````markdown
+# Authentication and Authorization on Amazon EKS
+
+## Objective
+
+This tutorial demonstrates how to:
+
+- Authenticate new IAM users to an Amazon EKS cluster
+- Authorize users to perform specific actions using Kubernetes RBAC
+
+---
+
+## Key Concepts
+
+| Concept                  | Explanation                                                          |
+|--------------------------|----------------------------------------------------------------------|
+| Authentication           | Verifying who the user is (handled by AWS IAM and `aws-auth` ConfigMap) |
+| Authorization            | Determining what the user is allowed to do (handled by Kubernetes RBAC) |
+| `aws-auth` ConfigMap     | Maps IAM users/roles to Kubernetes users and groups                  |
+| Role                     | Defines what actions are allowed on which resources                 |
+| RoleBinding              | Binds a Role to a user or group                                     |
+| Namespace                | Logical separation of resources in Kubernetes                       |
+| `kubectl auth can-i`     | CLI tool to test a user's permissions                              |
+
+---
+
+## Scenario: Alice Can Only View Pods in the `dev` Namespace
+
+### Step 1: Create IAM User `dev-alice`
+
+Use the AWS CLI or Console:
+
+```bash
+aws iam create-user --user-name dev-alice
+aws iam create-access-key --user-name dev-alice
+````
+
+Attach a minimal IAM policy to allow EKS cluster access:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "eks:DescribeCluster",
+    "Resource": "*"
+  }]
+}
 ```
 
-## HOW TO ISSUE A CERTIFICATE TO A USER IN THE CLUSTER:
-+ A few steps are required to get a normal user to be able to authenticate and invoke an API. 
-+ First, this user must have a certificate issued by the Kubernetes cluster, and then present that certificate to the Kubernetes API.
+### Step 2: Add Alice to the `aws-auth` ConfigMap
 
-### 1. Create private key
-The following scripts show how to generate PKI private key and CSR. It is important to set CN and O attributes of the CSR.
- CN is the name of the user and O is the group that this user will belong to. You can refer to RBAC for standard groups.
-```sh
-openssl genrsa -out prince.key 2048
-touch /root/.rnd
-chmod 600 /root/.rnd
-openssl req -new -key prince.key -out prince.csr -subj "/CN=prince"
-```
-### 2. Create a CertificateSigningRequest
-+ Create a CertificateSigningRequest and submit it to a Kubernetes Cluster via kubectl. Below is a script to generate the CertificateSigningRequest.
-```sh
-cat <<EOF | kubectl apply -f -
-apiVersion: certificates.k8s.io/v1
-kind: CertificateSigningRequest
-metadata:
-  name: prince
-spec:
-  request: #(base64 encoded value of the CSR file content)
-  signerName: kubernetes.io/kube-apiserver-client
-  expirationSeconds: 86400  # one day
-  usages:
-  - client auth
-EOF
-```
-#Some points to note:
+Edit the ConfigMap:
 
-+ usages has to be 'client auth'
-
-+ expirationSeconds could be made longer (i.e. 864000 for ten days) or shorter (i.e. 3600 for one hour)
-
-+ request is the base64 encoded value of the CSR file content. You can get the content using this command:
-```sh
-cat prince.csr | base64 | tr -d "\n"
-```
-### 3. Approve the CertificateSigningRequest
-+ Use kubectl to create a CSR and approve it.
-
-+ Get the list of CSRs:
-```sh
-kubectl get csr
-```
-### 4. Approve the CSR:
-```sh
-kubectl certificate approve prince
-```
-### 5. Get the certificate
-
-+ Retrieve the certificate from the CSR:
-```sh
-kubectl get csr/prince -o yaml
-```
-+ The certificate value is in Base64-encoded format under status.certificate.
-
-### 6. Export the issued certificate from the CertificateSigningRequest.
-```sh
-kubectl get csr prince -o jsonpath='{.status.certificate}'| base64 -d > prince.crt
+```bash
+kubectl edit configmap aws-auth -n kube-system
 ```
 
+Add the following under `mapUsers`:
 
-### 7. Create Role and RoleBinding
-+ With the certificate created it is time to define the Role and RoleBinding for this user to access Kubernetes cluster resources.
+```yaml
+mapUsers:
+  - userarn: arn:aws:iam::<ACCOUNT_ID>:user/dev-alice
+    username: dev-alice
+    groups:
+      - dev-read-only
+```
 
-+ This is a sample command to create a Role for this new user:
-```sh
-cat <<EOF | kubectl apply -f -
+This maps the IAM user to a Kubernetes username and group.
+
+### Step 3: Create a Namespace
+
+```bash
+kubectl create namespace dev
+```
+
+### Step 4: Create a Read-Only Role
+
+Save the following as `dev-read-only-role.yaml`:
+
+```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  namespace: devops
-  name: devops-role
+  namespace: dev
+  name: read-only-role
 rules:
 - apiGroups: [""]
-  resources: ["pods", "deployment" "secrets" "services"]
+  resources: ["pods"]
   verbs: ["get", "list", "watch"]
-EOF
 ```
-+ This is a sample command to create a RoleBinding for this new user:
-```sh
-cat <<EOF | kubectl apply -f -
+
+Apply it:
+
+```bash
+kubectl apply -f dev-read-only-role.yaml
+```
+
+### Step 5: Create a RoleBinding
+
+Save the following as `dev-read-only-binding.yaml`:
+
+```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: devops-role-binding
-  namespace: devops
+  namespace: dev
+  name: read-only-binding
 subjects:
-- kind: User
-  name: prince
+- kind: Group
+  name: dev-read-only
   apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: Role
-  name: devops-role
-  apiGroup: rbac.authorization.k8s.io
-EOF
-```
-### 8. Add to kubeconfig
-+ The last step is to add this user into the kubeconfig file.
-
-+ First, you need to add new credentials:
-```sh
-kubectl config set-credentials prince --client-key=prince.key --client-certificate=prince.crt --embed-certs=true
-```
-### 9. Then, you need to add the context:
-```sh
-kubectl config set-context prince --cluster=kubernetes --user=prince
-```
-+ To test it, change the context to prince:
-```sh
-kubectl config use-context prince
-```
-+ See the current context
-```sh
-kubectl config current-context
-```
-```sh
-kubectl auth can-i list pods --namespace devops
-```
-+ If you install Kubernetes with kubeadm, most certificates are stored in `/etc/kubernetes/pki`.
-  https://kubernetes.io/docs/setup/best-practices/certificates/
-+ [You can manage Kubeadm certificates here](https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-certs/)
-  
- ## Authorization
- + After being authenticated into a k8s cluster, all API requests made by an authenticated user in the cluster must be authorized by the API server against all objects and processes
- + Permissions in the cluster to make API calls are denied by default
- + The API request attributes being authorized are either the user, group, resource, verb, namespace path, etc
- + 
-### Authorization Modes
-## 1. [Attribut Based Access Control ABAC](https://kubernetes.io/docs/reference/access-authn-authz/abac/)
-+ Rights are granted to users through the use of policies that combine attributes.
-+ The policies can use any type of attribute (user, resource, object, environment, etc)
-+ Examples
-+ Mysuer can do anything to all resources:
-```sh
-{"apiVersion": "abac.authorization.kubernetes.io/v1beta1", "kind": "Policy", "spec": {"user": "prince", "namespace": "*", "resource": "*", "apiGroup": "*"}}
-```
-+ Bob can just read pods in namespace "projectCaribou":
-```sh
-{"apiVersion": "abac.authorization.kubernetes.io/v1beta1", "kind": "Policy", "spec": {"user": "prince", "namespace": "projectCaribou", "resource": "pods", "readonly": true}}
-```
-## 2. [Role Based Access Control RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
-
-+ This is a way of authorization where users in the cluster are permitted to perform actions based on their role in the company
-+ This generally follows the principles of least privilege
-+ To enable RBAC, start the apiserver with --authorization-mode=RBAC.
-+ The RBAC permissions are granted in the form of Roles and ClsuterRoles which are additive i.e, there is not deny
-+ A Role always sets permissions within a particular namespace; when you create a Role, you have to specify the namespace it belongs in.
-+ ClusterRole, by contrast, is a non-namespaced resource.
-+ A RoleBinding or ClusterRoleBinding is used to attach the ClusterRole or Role to the new user.
-
-## *Role and RoleBinding Example:*
-+ A role gives a user access to API Resources within a specific namespace
-```sh
-cat <<EOF | kubectl apply -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  namespace: dev
-  name: pod-reader
-rules:
-- apiGroups: [""] # "" indicates the core API group
-  resources: ["pods"]
-  verbs: ["get", "watch", "list"]
-EOF
-```
-
-+ This role binding allows "prince" to read pods in the "default" namespace.
-+ You need to already have a Role named "pod-reader" in that namespace.
-```sh
-cat <<EOF | kubectl apply -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: read-pods
-  namespace: dev
-subjects:
-# You can specify more than one "subject"
-- kind: User
-  name: prince # "name" is case sensitive
-  apiGroup: rbac.authorization.k8s.io
-roleRef:
-  # "roleRef" specifies the binding to a Role / ClusterRole
-  kind: Role #this must be Role or ClusterRole
-  name: pod-reader # This must match the name of the Role or ClusterRole you wish to bind to
+  name: read-only-role
   apiGroup: rbac.authorization.k8s.io
 ```
 
-## *ClusterRole and ClusterRoleBinding Example:*
-+ A Cluster role grants a user access to peform specific functions with the entire cluser.
-+ Even though they are action bound, they are not namespace bound
-  
-```sh
-cat <<EOF | kubectl apply -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  # "namespace" omitted since ClusterRoles are not namespaced
-  name: secret-reader
+Apply it:
+
+```bash
+kubectl apply -f dev-read-only-binding.yaml
+```
+
+### Step 6: Configure `kubectl` for Alice
+
+On Alice’s machine, or with her credentials:
+
+```bash
+aws eks update-kubeconfig --region <region> --name <cluster> --profile alice
+```
+
+Test permissions:
+
+```bash
+kubectl auth can-i list pods -n dev           # Should return "yes"
+kubectl auth can-i delete pods -n dev         # Should return "no"
+kubectl get pods -n dev
+kubectl delete pod <pod-name> -n dev          # Should be forbidden
+```
+
+---
+
+## Optional: Allow Logs Viewing Only
+
+Change the Role rules if you only want Alice to view pod logs:
+
+```yaml
 rules:
 - apiGroups: [""]
-  #
-  # at the HTTP level, the name of the resource for accessing Secret
-  # objects is "secrets"
-  resources: ["secrets"]
-  verbs: ["get", "watch", "list"]
+  resources: ["pods/log"]
+  verbs: ["get"]
 ```
-```sh
-cat <<EOF | kubectl apply -f -
-apiVersion: rbac.authorization.k8s.io/v1
-# This cluster role binding allows anyone in the "manager" group to read secrets in any namespace.
-kind: ClusterRoleBinding
-metadata:
-  name: read-secrets-global
-subjects:
-- kind: Group
-  name: manager # Name is case sensitive
-  apiGroup: rbac.authorization.k8s.io
-roleRef:
-  kind: ClusterRole
-  name: secret-reader
-  apiGroup: rbac.authorization.k8s.io
-```
+
+---
+
+## YAML Object Overview
+
+| Object             | Purpose                                         |
+| ------------------ | ----------------------------------------------- |
+| aws-auth ConfigMap | Authenticates AWS IAM users/roles to Kubernetes |
+| Role               | Defines allowed actions (e.g., read pods)       |
+| RoleBinding        | Grants the Role to a specific user or group     |
+| Namespace          | Scopes permissions within a logical boundary    |
+| IAM User           | Identity authenticated by AWS IAM               |
+
+
+---
+
+## Next Steps
+
+You can extend this setup by:
+
+* Creating `ClusterRoles` and `ClusterRoleBindings` for cross-namespace access
+* Using IAM Roles instead of IAM Users (with role assumption and identity federation)
+* Integrating with AWS IAM Identity Center for enterprise SSO
+
 
 # NETWORKING:
   
