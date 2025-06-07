@@ -2862,6 +2862,206 @@ You can extend this setup by:
 * Integrating with AWS IAM Identity Center for enterprise SSO
 
 
+---
+# OPTION 2
+##  Full Guide: Set Up EKS Access via IAM Identity Center Access Portal
+
+This guide walks through setting up **fine-grained access to an EKS cluster** using **IAM Identity Center + Access Portal** with **custom RBAC roles** inside Kubernetes.
+
+---
+
+###  Prerequisites
+
+* EKS cluster is already running
+* IAM Identity Center is **enabled and configured**
+* `aws`, `kubectl`, and `eksctl` installed
+* User has permission to manage IAM, EKS, and Identity Center
+
+---
+
+##  Step-by-Step Setup
+
+---
+
+### Step 1: Enable and Configure IAM Identity Center
+
+1. Go to **AWS Console > IAM Identity Center**
+2. Click **Enable IAM Identity Center**
+3. Choose Identity Source:
+
+   * Use the default AWS-managed directory
+   * Or connect to an external provider (e.g., Azure AD, Okta)
+4. Ensure **Access Portal** is enabled (you’ll get a link like `https://yourcompany.awsapps.com/start`)
+
+---
+
+### Step 2: Create Permission Sets (Roles)
+
+Each permission set corresponds to what the user will see in their **Access Portal profile**:
+
+#### A. Create EKS Viewer Role
+
+Go to **Permission Sets > Create New Permission Set**
+
+* Name: `EKSViewer`
+* Attach policy: `AmazonEKS_ReadOnlyAccess`
+* Optionally add tags, set session duration (e.g. 1h)
+
+#### B. Create EKS Developer Role
+
+* Name: `EKSDeveloper`
+* Attach policy: `AmazonEKSFullAccess`
+* You’ll later restrict this via Kubernetes RBAC
+
+#### C. Create EKS Admin Role
+
+* Name: `EKSAdmin`
+* Attach policy: `AdministratorAccess` *(or custom)*
+
+---
+
+### Step 3: Create Groups and Assign Users
+
+1. Go to **Users and Groups**
+
+2. Create groups like:
+
+   * `eks-viewers`
+   * `eks-developers`
+   * `eks-admins`
+
+3. Assign users to these groups
+
+4. Go to **AWS Account Assignments**, and assign:
+
+| Group            | AWS Account      | Permission Set |
+| ---------------- | ---------------- | -------------- |
+| `eks-viewers`    | your EKS account | `EKSViewer`    |
+| `eks-developers` | your EKS account | `EKSDeveloper` |
+| `eks-admins`     | your EKS account | `EKSAdmin`     |
+
+---
+
+### Step 4: Map IAM Roles to Kubernetes RBAC
+
+Each Permission Set generates a unique IAM Role. Find it under:
+
+* IAM > Roles > `AWSReservedSSO_EKSViewer_xxxxxxxx`
+
+Copy the **Role ARN** for each permission set.
+
+Edit the `aws-auth` ConfigMap:
+
+```bash
+kubectl edit configmap aws-auth -n kube-system
+```
+
+Add:
+
+```yaml
+mapRoles:
+  - rolearn: arn:aws:iam::<account-id>:role/AWSReservedSSO_EKSViewer_xxx
+    username: eks-viewer
+    groups:
+      - eks-viewers
+
+  - rolearn: arn:aws:iam::<account-id>:role/AWSReservedSSO_EKSDeveloper_xxx
+    username: eks-developer
+    groups:
+      - eks-developers
+
+  - rolearn: arn:aws:iam::<account-id>:role/AWSReservedSSO_EKSAdmin_xxx
+    username: eks-admin
+    groups:
+      - eks-admins
+```
+
+---
+
+### Step 5: Create Kubernetes RBAC Rules
+
+#### Viewer Role:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: eks-viewer-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "nodes"]
+  verbs: ["get", "list", "watch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: eks-viewer-binding
+subjects:
+- kind: Group
+  name: eks-viewers
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: eks-viewer-role
+  apiGroup: rbac.authorization.k8s.io
+```
+
+Repeat for `eks-developers` (with `Role` scoped to `dev` namespace) and `eks-admins` (bind to `cluster-admin`).
+
+---
+
+### Step 6: Test with Access Portal
+
+Users go to their Access Portal:
+
+```
+https://yourcompany.awsapps.com/start
+```
+
+They will see:
+
+```
+EKSViewer (your-account-name)
+EKSDeveloper (your-account-name)
+EKSAdmin (your-account-name)
+```
+
+From CLI, they:
+
+1. Select a profile:
+
+```bash
+aws configure sso
+aws sso login --profile eks-developer
+```
+
+2. Connect `kubectl`:
+
+```bash
+aws eks update-kubeconfig --name <cluster-name> --region <region> --profile eks-developer
+```
+
+3. Test access:
+
+```bash
+kubectl auth can-i list pods
+kubectl auth can-i delete deployment nginx -n dev
+kubectl auth can-i list secrets -n kube-system
+```
+
+---
+
+## Summary Table
+
+| Role          | IAM Permission Set        | Kubernetes Group | Access Level               |
+| ------------- | ------------------------- | ---------------- | -------------------------- |
+| EKS Viewer    | AmazonEKS\_ReadOnlyAccess | `eks-viewers`    | Read-only cluster-wide     |
+| EKS Developer | AmazonEKSFullAccess       | `eks-developers` | CRUD in limited namespaces |
+| EKS Admin     | AdministratorAccess       | `eks-admins`     | Full cluster admin         |
+
+---
+
+
 # NETWORKING:
   
 + Linux Networking Basics:
